@@ -19,13 +19,10 @@
         .hud-label { font-size: 1rem; color: #ccc; letter-spacing: 2px; }
         #nitro-container { position: relative; width: 250px; height: 20px; background: rgba(0,0,0,0.6); border: 2px solid #fff; margin-top: 5px; border-radius: 4px; overflow: hidden; }
         #nitro-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00f0ff, #00ffcc); transition: width 0.1s; }
-        
-        /* FIX: Boost Safety Gate Minimum Line */
         #nitro-min-line { position: absolute; left: 25%; top: 0; height: 100%; width: 2px; background: rgba(255, 0, 0, 0.8); z-index: 2; box-shadow: 0 0 4px red;}
 
         .turbo-active #nitro-fill { box-shadow: 0 0 20px #00f0ff; background: #fff; }
 
-        /* FIX: Mobile Controls Overlay */
         #mobile-controls { position: absolute; bottom: 20px; left: 0; width: 100vw; display: flex; justify-content: space-between; padding: 0 20px; z-index: 20; pointer-events: none; }
         #mc-left, #mc-right { display: flex; gap: 10px; align-items: flex-end; }
         .touch-btn { pointer-events: auto; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.5); border-radius: 12px; color: #fff; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; touch-action: none; font-weight: bold; }
@@ -135,7 +132,6 @@
 
     function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); if(id) document.getElementById(id).classList.remove('hidden'); }
 
-    // --- TOUCH CONTROLS SETUP ---
     function bindTouch(btnId, keyCode) {
         const btn = document.getElementById(btnId);
         btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyCode] = true; });
@@ -147,7 +143,6 @@
     bindTouch('btn-gas', 'ArrowUp');
     bindTouch('btn-nitro', 'ShiftLeft');
 
-    // --- NETWORKING ---
     function hostRoom() { 
         const code = Math.random().toString(36).substring(2,7).toUpperCase(); 
         peer = new Peer(code); 
@@ -186,7 +181,8 @@
             if(isHost) {
                 traffic = [];
                 let types = ['compact', 'sedan', 'suv', 'truck'];
-                for (let d = 800; d < 9800; d += 350 + Math.random()*200) {
+                // FIX: ROUND 3 - Traffic stops generating at 9500m
+                for (let d = 800; d < 9500; d += 350 + Math.random()*200) {
                     let openLane = Math.floor(Math.random() * 3); 
                     let blockSpeed = 60 + Math.random() * 40; 
                     for (let lane = 0; lane < 3; lane++) {
@@ -232,11 +228,9 @@
         p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); 
         p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
 
-        // FIX: Boost Safety Gate Logic
         if (p1.nitro < 25 && !p1.turboActive) p1.nitroLocked = true;
         if (p1.nitro >= 25) p1.nitroLocked = false;
 
-        // FIX: Boost Duration (33 * dt instead of 50 * dt makes it last ~1.5x longer)
         if (keys['ShiftLeft'] && p1.speed > 80 && !p1.nitroLocked && p1.nitro > 0) {
             p1.turboActive = true;
             p1.nitro -= 33 * dt; 
@@ -252,7 +246,12 @@
         p1.speed = Math.min(target, p1.speed + acc * dt);
         if (!keys['KeyW'] && !keys['ArrowUp'] && p1.speed > 0) p1.speed -= 100 * dt;
 
-        p1.dist += (p1.speed * 0.277 * WORLD_SPEED_MULT) * dt;
+        // FIX: ROUND 3 - Distance Compression for Final Sprint
+        let distGain = (p1.speed * 0.277 * WORLD_SPEED_MULT) * dt;
+        if (p1.dist > 9500) {
+            distGain *= 2; // Doubled distance gain = crossing 500m in half the time
+        }
+        p1.dist += distGain;
 
         traffic.forEach(t => {
             let rel = (t.s - p1.speed) * 0.277 * WORLD_SPEED_MULT;
@@ -336,6 +335,49 @@
             }
         }
 
+        // FIX: ROUND 3 - The Finish Line rendering
+        let flZ = TOTAL_DIST;
+        if (flZ > p1.dist - 100 && flZ < p1.dist + 1800) {
+            let flP1 = project(-300, 0, flZ); let flP2 = project(300, 0, flZ);
+            let flP3 = project(300, 0, flZ + 60); let flP4 = project(-300, 0, flZ + 60);
+            
+            if (flP1 && flP3 && flP1.y > horizon) {
+                // Draw checkered pattern on the ground
+                let cols = 12;
+                let stepX1 = (flP2.x - flP1.x) / cols;
+                let stepX2 = (flP3.x - flP4.x) / cols;
+                for(let i=0; i<cols; i++) {
+                    ctx.fillStyle = (i%2 === 0) ? "#fff" : "#000";
+                    ctx.beginPath();
+                    ctx.moveTo(flP1.x + i*stepX1, flP1.y);
+                    ctx.lineTo(flP1.x + (i+1)*stepX1, flP1.y);
+                    ctx.lineTo(flP4.x + (i+1)*stepX2, flP4.y);
+                    ctx.lineTo(flP4.x + i*stepX2, flP4.y);
+                    ctx.fill();
+                }
+            }
+
+            // Draw Flag Poles
+            function drawPole(x) {
+                let base = project(x, 0, flZ);
+                let top = project(x, -250, flZ);
+                if (base && top && base.y > horizon) {
+                    ctx.fillStyle = "#888";
+                    let pw = Math.max(8 * base.s, 1);
+                    ctx.fillRect(top.x - pw/2, top.y, pw, base.y - top.y); // Pole
+                    
+                    // Banner Flag
+                    ctx.fillStyle = "#ff0000";
+                    ctx.fillRect(top.x, top.y, 100 * top.s, 60 * top.s); 
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillRect(top.x + 10*top.s, top.y + 10*top.s, 30*top.s, 20*top.s);
+                    ctx.fillRect(top.x + 40*top.s, top.y + 30*top.s, 30*top.s, 20*top.s);
+                }
+            }
+            drawPole(-340);
+            drawPole(340);
+        }
+
         function draw3DBox(worldX, worldZ, wSize, hSize, lSize, c, yOff) {
             let fTL = project(worldX - wSize/2, -(hSize + yOff), worldZ + lSize); let fTR = project(worldX + wSize/2, -(hSize + yOff), worldZ + lSize);
             let fBL = project(worldX - wSize/2, -yOff, worldZ + lSize); let fBR = project(worldX + wSize/2, -yOff, worldZ + lSize);
@@ -359,13 +401,12 @@
         }
 
         function drawVehicle(worldX, worldZ, dims, c, isPlayer) {
-            // FIX: The Phantom "Donut" - Drawn as a proper 3D projected trapezoid
             let sTL = project(worldX - dims.w/1.4, 0, worldZ + dims.lB);
             let sTR = project(worldX + dims.w/1.4, 0, worldZ + dims.lB);
             let sBL = project(worldX - dims.w/1.4, 0, worldZ);
             let sBR = project(worldX + dims.w/1.4, 0, worldZ);
             
-            if (sTL && sTR && sBL && sBR) { 
+            if (sTL && sTR && sBL && sBR && sTL.y > horizon) { 
                 ctx.fillStyle = "rgba(0,0,0,0.5)"; 
                 ctx.beginPath();
                 ctx.moveTo(sTL.x, sTL.y); ctx.lineTo(sTR.x, sTR.y); 
