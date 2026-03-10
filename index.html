@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>10K Hyper-Drive - Warp Speed 3D</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; font-family: 'Arial Black', sans-serif; }
+        body { background-color: #000; color: white; overflow: hidden; touch-action: none; }
+        #game-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; background: #000; }
+        canvas { background: #87CEEB; height: 100%; width: 100%; max-width: 1400px; display: block; }
+        
+        #progress-container { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 60%; height: 12px; background: rgba(0,0,0,0.6); border: 2px solid #fff; border-radius: 6px; z-index: 5; }
+        #p1-icon { position: absolute; top: -12px; color: #00ffcc; font-size: 1.5rem; transition: left 0.1s linear; text-shadow: 0 0 5px #000; }
+        #p2-icon { position: absolute; top: -12px; color: #ff0055; font-size: 1.5rem; transition: left 0.1s linear; text-shadow: 0 0 5px #000; }
+
+        #hud { position: absolute; bottom: 30px; left: 30px; z-index: 5; text-shadow: 2px 2px 4px #000; font-size: 1.8rem; pointer-events: none; }
+        .hud-label { font-size: 1rem; color: #ccc; letter-spacing: 2px; }
+        #nitro-container { position: relative; width: 250px; height: 20px; background: rgba(0,0,0,0.6); border: 2px solid #fff; margin-top: 5px; border-radius: 4px; overflow: hidden; }
+        #nitro-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00f0ff, #00ffcc); transition: width 0.1s; }
+        
+        /* FIX: Boost Safety Gate Minimum Line */
+        #nitro-min-line { position: absolute; left: 25%; top: 0; height: 100%; width: 2px; background: rgba(255, 0, 0, 0.8); z-index: 2; box-shadow: 0 0 4px red;}
+
+        .turbo-active #nitro-fill { box-shadow: 0 0 20px #00f0ff; background: #fff; }
+
+        /* FIX: Mobile Controls Overlay */
+        #mobile-controls { position: absolute; bottom: 20px; left: 0; width: 100vw; display: flex; justify-content: space-between; padding: 0 20px; z-index: 20; pointer-events: none; }
+        #mc-left, #mc-right { display: flex; gap: 10px; align-items: flex-end; }
+        .touch-btn { pointer-events: auto; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.5); border-radius: 12px; color: #fff; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; touch-action: none; font-weight: bold; }
+        .touch-btn:active { background: rgba(255,255,255,0.4); }
+        .btn-steer { width: 60px; height: 60px; border-radius: 50%; }
+        #btn-gas { width: 80px; height: 80px; background: rgba(0, 255, 100, 0.2); border-color: #0f8; }
+        #btn-nitro { width: 70px; height: 60px; background: rgba(0, 240, 255, 0.2); border-color: #0ff; font-size: 1rem;}
+
+        .screen { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); z-index: 30; backdrop-filter: blur(5px); }
+        .hidden { display: none !important; }
+        h1 { font-size: 4.5rem; text-transform: uppercase; margin-bottom: 1rem; text-shadow: 4px 4px 0 #000; text-align: center; line-height: 1.1; }
+        button { background: #fff; border: none; padding: 15px 60px; font-size: 1.5rem; font-weight: bold; cursor: pointer; margin: 10px; color: #000; border-radius: 4px; transition: transform 0.1s; }
+        button:active { transform: scale(0.95); }
+        input { padding: 15px; font-size: 1.5rem; text-align: center; border: 4px solid #fff; background: #222; color: #fff; margin-bottom: 20px; border-radius: 4px; text-transform: uppercase; }
+        
+        #countdown-ui { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 15rem; z-index: 25; font-weight: bold; pointer-events: none; text-shadow: 8px 8px 0 rgba(0,0,0,0.5); color: #fff; }
+        #screen-lobby button { margin: 8px 6px; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"><canvas id="gameCanvas"></canvas></div>
+    <div id="progress-container" class="hidden"><div id="p2-icon">▼</div><div id="p1-icon">▲</div></div>
+
+    <div id="hud" class="hidden">
+        <div><span class="hud-label">SPEED</span> <br><span id="hud-speed">0</span> KM/H</div>
+        <div style="margin-top:10px;"><span class="hud-label">DISTANCE</span> <br><span id="hud-dist">0</span> M</div>
+        <div style="margin-top:20px;" class="hud-label">NITROUS OXIDE</div>
+        <div id="nitro-container">
+            <div id="nitro-fill"></div>
+            <div id="nitro-min-line"></div>
+        </div>
+    </div>
+
+    <div id="mobile-controls" class="hidden">
+        <div id="mc-left">
+            <div id="btn-left" class="touch-btn btn-steer">◀</div>
+            <div id="btn-right" class="touch-btn btn-steer">▶</div>
+        </div>
+        <div id="mc-right">
+            <div id="btn-nitro" class="touch-btn">NITRO</div>
+            <div id="btn-gas" class="touch-btn">GAS</div>
+        </div>
+    </div>
+
+    <div id="countdown-ui" class="hidden"></div>
+
+    <div id="screen-start" class="screen">
+        <h1>WARP SPEED<br>3D</h1>
+        <p style="margin-bottom:30px; color:#fff; font-size:1.2rem; text-align: center;">W: ACCELERATE | A/D: STEER | SHIFT: NITRO<br><span style="font-size: 0.9rem; color: #aaa;">(Touch controls available on mobile)</span></p>
+        <button onclick="showScreen('screen-menu')">START ENGINE</button>
+    </div>
+
+    <div id="screen-menu" class="screen hidden">
+        <h2 style="font-size:3rem; margin-bottom: 30px;">MULTIPLAYER</h2>
+        <button onclick="hostRoom()" style="background:#00ffcc;">HOST GAME</button>
+        <input type="text" id="join-code" placeholder="ENTER CODE">
+        <button onclick="joinRoom()" style="background:#ff0055; color:#fff;">JOIN GAME</button>
+    </div>
+
+    <div id="screen-lobby" class="screen hidden">
+        <h2 id="lobby-code-display" style="font-size:3rem; color:#00ffcc;">ROOM: ---</h2>
+        <div id="lobby-status" style="font-size:1.5rem; margin: 20px 0;">WAITING...</div>
+        <button id="btn-ready" class="hidden" onclick="toggleReady()">READY UP</button>
+        <div style="margin-top:20px;">
+            <button id="btn-back" onclick="leaveLobby()" style="background:#ff4444; color:#fff;">BACK TO MENU</button>
+        </div>
+    </div>
+
+    <div id="screen-gameover" class="screen hidden">
+        <h1 id="go-title">RACE OVER</h1>
+        <p id="go-reason" style="font-size:1.5rem; margin-bottom:2rem;"></p>
+        <button onclick="location.reload()">RETURN TO MENU</button>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const TOTAL_DIST = 10000;
+    const WORLD_SPEED_MULT = 4.0; 
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+    let peer, conn, isHost = false, gameState = 'START';
+    let p1 = { lane: 1, camLane: 1, dist: 0, speed: 0, nitro: 100, turboActive: false, nitroLocked: false, ready: false, dead: false };
+    let p2 = { lane: 1, dist: 0, ready: false, dead: false };
+    let traffic = [], keys = {}, lastTime = 0, netTimer = 0, shake = 0;
+
+    const V_DIMS = {
+        player:  { w: 45, hB: 18, hC: 14, lB: 100, lC: 45, zOff: 25 },
+        compact: { w: 40, hB: 16, hC: 15, lB: 85,  lC: 40, zOff: 20 },
+        sedan:   { w: 48, hB: 18, hC: 14, lB: 110, lC: 50, zOff: 30 },
+        suv:     { w: 55, hB: 28, hC: 22, lB: 125, lC: 60, zOff: 35 },
+        truck:   { w: 65, hB: 45, hC: 30, lB: 280, lC: 50, zOff: 230 } 
+    };
+
+    const COLORS = [
+        { f: "#b02", t: "#d03", s: "#801", b: "#e04" },
+        { f: "#15b", t: "#26c", s: "#049", b: "#37d" },
+        { f: "#182", t: "#293", s: "#061", b: "#3a4" },
+        { f: "#aa1", t: "#bb2", s: "#880", b: "#cc3" },
+        { f: "#ddd", t: "#eee", s: "#bbb", b: "#fff" },
+        { f: "#333", t: "#444", s: "#111", b: "#555" } 
+    ];
+
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    window.onresize = resize; resize();
+
+    function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); if(id) document.getElementById(id).classList.remove('hidden'); }
+
+    // --- TOUCH CONTROLS SETUP ---
+    function bindTouch(btnId, keyCode) {
+        const btn = document.getElementById(btnId);
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyCode] = true; });
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[keyCode] = false; });
+        btn.addEventListener('touchcancel', (e) => { e.preventDefault(); keys[keyCode] = false; });
+    }
+    bindTouch('btn-left', 'ArrowLeft');
+    bindTouch('btn-right', 'ArrowRight');
+    bindTouch('btn-gas', 'ArrowUp');
+    bindTouch('btn-nitro', 'ShiftLeft');
+
+    // --- NETWORKING ---
+    function hostRoom() { 
+        const code = Math.random().toString(36).substring(2,7).toUpperCase(); 
+        peer = new Peer(code); 
+        peer.on('open', () => { isHost = true; showScreen('screen-lobby'); document.getElementById('lobby-code-display').innerText = "ROOM: " + code; }); 
+        peer.on('connection', c => { conn = c; setupConn(); }); 
+        peer.on('error', err => { console.warn('Peer error', err); document.getElementById('lobby-status').innerText = "NETWORK ERROR"; });
+    }
+    function joinRoom() { 
+        const code = document.getElementById('join-code').value.toUpperCase(); if(!code) return; 
+        peer = new Peer(); 
+        peer.on('open', () => { conn = peer.connect(code); setupConn(); showScreen('screen-lobby'); }); 
+        peer.on('error', err => { console.warn('Peer error', err); document.getElementById('lobby-status').innerText = "CONNECT FAILED"; });
+    }
+    function setupConn() {
+        conn.on('open', () => { document.getElementById('lobby-status').innerText = "LINK ESTABLISHED"; document.getElementById('btn-ready').classList.remove('hidden'); });
+        conn.on('close', () => { document.getElementById('lobby-status').innerText = "DISCONNECTED"; });
+        conn.on('data', data => {
+            if(data.type === 'ready') { p2.ready = data.val; checkStart(); }
+            if(data.type === 'traffic') traffic = data.val;
+            if(data.type === 'sync') { 
+                p2.dist = data.dist || p2.dist; 
+                p2.lane = (typeof data.lane === 'number') ? data.lane : p2.lane; 
+                if(data.dead) endGame("OPPONENT WRECKED!", true);
+            }
+        });
+    }
+    function toggleReady() { 
+        p1.ready = !p1.ready; 
+        document.getElementById('btn-ready').style.background = p1.ready ? "#0f0" : "#fff"; 
+        if(conn && conn.open) conn.send({type: 'ready', val: p1.ready}); 
+        checkStart(); 
+    }
+
+    function checkStart() {
+        if(p1.ready && p2.ready) {
+            if(isHost) {
+                traffic = [];
+                let types = ['compact', 'sedan', 'suv', 'truck'];
+                for (let d = 800; d < 9800; d += 350 + Math.random()*200) {
+                    let openLane = Math.floor(Math.random() * 3); 
+                    let blockSpeed = 60 + Math.random() * 40; 
+                    for (let lane = 0; lane < 3; lane++) {
+                        if (lane === openLane) continue; 
+                        if (Math.random() < 0.7) { 
+                            let type = types[Math.floor(Math.random() * types.length)];
+                            let col = COLORS[Math.floor(Math.random() * COLORS.length)];
+                            traffic.push({ d: d + (Math.random()*20 - 10), l: lane, s: blockSpeed, type: type, col: col });
+                        }
+                    }
+                }
+                if(conn && conn.open) conn.send({type:'traffic', val: traffic});
+            }
+            startCountdown();
+        }
+    }
+
+    function startCountdown() {
+        showScreen(null); gameState = 'COUNTDOWN';
+        const ui = document.getElementById('countdown-ui'); ui.classList.remove('hidden');
+        if(isTouchDevice) document.getElementById('mobile-controls').classList.remove('hidden');
+
+        p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; p1.nitroLocked = false;
+        let count = 3; ui.innerText = count;
+        let t = setInterval(() => { 
+            count--; 
+            ui.innerText = count > 0 ? count : "GO!"; 
+            if(count < 0) { 
+                clearInterval(t); ui.classList.add('hidden'); document.querySelectorAll('#hud, #progress-container').forEach(e => e.classList.remove('hidden')); gameState = 'RACE'; lastTime = performance.now(); 
+            } 
+        }, 1000);
+    }
+
+    window.onkeydown = e => { keys[e.code] = true; };
+    window.onkeyup = e => { keys[e.code] = false; };
+
+    function update(dt) {
+        if (shake > 0) shake -= dt * 10;
+
+        let steerSpeed = 4.5; 
+        if(keys['KeyA'] || keys['ArrowLeft']) p1.lane -= steerSpeed * dt;
+        if(keys['KeyD'] || keys['ArrowRight']) p1.lane += steerSpeed * dt;
+        p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); 
+        p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
+
+        // FIX: Boost Safety Gate Logic
+        if (p1.nitro < 25 && !p1.turboActive) p1.nitroLocked = true;
+        if (p1.nitro >= 25) p1.nitroLocked = false;
+
+        // FIX: Boost Duration (33 * dt instead of 50 * dt makes it last ~1.5x longer)
+        if (keys['ShiftLeft'] && p1.speed > 80 && !p1.nitroLocked && p1.nitro > 0) {
+            p1.turboActive = true;
+            p1.nitro -= 33 * dt; 
+            shake = Math.max(shake, 1.5);
+            if(p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; p1.nitroLocked = true; }
+        } else {
+            p1.turboActive = false;
+            if (p1.nitro < 100) p1.nitro += 15 * dt;
+        }
+
+        let target = (keys['KeyW'] || keys['ArrowUp']) ? (p1.turboActive ? 320 : 180) : 0;
+        let acc = (p1.speed < target) ? 140 : 250; 
+        p1.speed = Math.min(target, p1.speed + acc * dt);
+        if (!keys['KeyW'] && !keys['ArrowUp'] && p1.speed > 0) p1.speed -= 100 * dt;
+
+        p1.dist += (p1.speed * 0.277 * WORLD_SPEED_MULT) * dt;
+
+        traffic.forEach(t => {
+            let rel = (t.s - p1.speed) * 0.277 * WORLD_SPEED_MULT;
+            t.d += rel * dt;
+
+            let lBound = V_DIMS[t.type].lB;
+            let zOverlap = Math.abs(p1.dist - t.d) < (lBound * 0.6); 
+            let xOverlap = Math.abs(p1.lane - t.l) < 0.40; 
+            
+            if(zOverlap && xOverlap && !p1.dead) {
+                p1.dead = true;
+                shake = 20;
+                if(conn && conn.open) conn.send({type: 'sync', dist: p1.dist, lane: p1.lane, dead: true});
+                endGame("WRECKED!", false);
+            }
+        });
+
+        if(p1.dist >= TOTAL_DIST) {
+            if(conn && conn.open) conn.send({type: 'sync', dist: p1.dist, lane: p1.lane, dead: false});
+            endGame("VICTORY!", true);
+        }
+
+        netTimer += dt;
+        if(netTimer > 0.1) {
+            if(conn && conn.open) conn.send({type: 'sync', dist: p1.dist, lane: p1.lane, dead: p1.dead});
+            netTimer = 0;
+        }
+
+        document.getElementById('hud-speed').innerText = Math.floor(p1.speed);
+        document.getElementById('hud-dist').innerText = Math.floor(p1.dist);
+        document.getElementById('nitro-fill').style.width = p1.nitro + "%";
+        document.getElementById('nitro-fill').style.background = p1.nitroLocked ? "linear-gradient(90deg, #ff4444, #ff0000)" : "linear-gradient(90deg, #00f0ff, #00ffcc)";
+        document.getElementById('p1-icon').style.left = Math.min((p1.dist / TOTAL_DIST * 100), 100) + "%";
+        document.getElementById('p2-icon').style.left = Math.min((p2.dist / TOTAL_DIST * 100), 100) + "%";
+        document.body.className = p1.turboActive ? "turbo-active" : "";
+    }
+
+    function draw() {
+        let w = canvas.width, h = canvas.height;
+        ctx.save();
+        if (shake > 0) ctx.translate(Math.random()*shake - shake/2, Math.random()*shake - shake/2);
+
+        let horizon = h * 0.45;
+        let skyGrad = ctx.createLinearGradient(0, 0, 0, horizon);
+        skyGrad.addColorStop(0, "#87CEEB"); skyGrad.addColorStop(1, "#63B8FF");
+        ctx.fillStyle = skyGrad; ctx.fillRect(0,0,w,h);
+
+        ctx.fillStyle = "#2E8B57"; ctx.fillRect(0, horizon, w, h-horizon);
+
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = "#FFD700"; ctx.beginPath(); ctx.arc(w*0.8, horizon - 80, 60, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1.0;
+
+        let focalLength = p1.turboActive ? h * 0.35 : h * 0.55; 
+
+        function project(worldX, worldY, worldZ) {
+            let dz = worldZ - p1.dist;
+            if(dz < -50) return null; 
+            let scale = focalLength / (dz + 180); 
+            let camX = (p1.camLane - 1) * 150; 
+            return { x: w/2 + (worldX - camX)*scale, y: horizon + (worldY + 120)*scale, s: scale };
+        }
+
+        let r1 = project(-300, 0, p1.dist - 50); let r2 = project(300, 0, p1.dist - 50);
+        let r3 = project(300, 0, p1.dist + 1800); let r4 = project(-300, 0, p1.dist + 1800);
+        if(r1 && r3) {
+            ctx.fillStyle = "#282b2e"; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.lineTo(r4.x, horizon); ctx.fill();
+            ctx.strokeStyle = "#fff"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r4.x, horizon); ctx.stroke(); ctx.beginPath(); ctx.moveTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.stroke();
+        }
+
+        let totalCycle = 30; 
+        ctx.fillStyle = "#fff";
+        for(let z = Math.floor(p1.dist/totalCycle)*totalCycle; z < p1.dist + 1800; z += totalCycle) {
+            let pL1 = project(-100, 0, z); let pL2 = project(-100, 0, z + 15);
+            let pR1 = project(100, 0, z); let pR2 = project(100, 0, z + 15);
+            if (pL1 && pL2 && pL1.y > horizon) {
+                ctx.beginPath(); ctx.moveTo(pL1.x - 2*pL1.s, pL1.y); ctx.lineTo(pL1.x + 2*pL1.s, pL1.y); ctx.lineTo(pL2.x + 2*pL2.s, pL2.y); ctx.lineTo(pL2.x - 2*pL2.s, pL2.y); ctx.fill();
+            }
+            if (pR1 && pR2 && pR1.y > horizon) {
+                ctx.beginPath(); ctx.moveTo(pR1.x - 2*pR1.s, pR1.y); ctx.lineTo(pR1.x + 2*pR1.s, pR1.y); ctx.lineTo(pR2.x + 2*pR2.s, pR2.y); ctx.lineTo(pR2.x - 2*pR2.s, pR2.y); ctx.fill();
+            }
+        }
+
+        function draw3DBox(worldX, worldZ, wSize, hSize, lSize, c, yOff) {
+            let fTL = project(worldX - wSize/2, -(hSize + yOff), worldZ + lSize); let fTR = project(worldX + wSize/2, -(hSize + yOff), worldZ + lSize);
+            let fBL = project(worldX - wSize/2, -yOff, worldZ + lSize); let fBR = project(worldX + wSize/2, -yOff, worldZ + lSize);
+            let bTL = project(worldX - wSize/2, -(hSize + yOff), worldZ); let bTR = project(worldX + wSize/2, -(hSize + yOff), worldZ);
+            let bBL = project(worldX - wSize/2, -yOff, worldZ); let bBR = project(worldX + wSize/2, -yOff, worldZ);
+            if(!fTL || !bTL) return;
+
+            ctx.fillStyle = c.f; ctx.beginPath(); ctx.moveTo(fTL.x, fTL.y); ctx.lineTo(fTR.x, fTR.y); ctx.lineTo(fBR.x, fBR.y); ctx.lineTo(fBL.x, fBL.y); ctx.fill();
+            ctx.fillStyle = c.t; ctx.beginPath(); ctx.moveTo(fTL.x, fTL.y); ctx.lineTo(fTR.x, fTR.y); ctx.lineTo(bTR.x, bTR.y); ctx.lineTo(bTL.x, bTL.y); ctx.fill();
+            
+            let camX = (p1.camLane - 1) * 150;
+            ctx.fillStyle = c.s;
+            if (worldX > camX) { 
+                ctx.beginPath(); ctx.moveTo(fTL.x, fTL.y); ctx.lineTo(fBL.x, fBL.y); ctx.lineTo(bBL.x, bBL.y); ctx.lineTo(bTL.x, bTL.y); ctx.fill();
+            } else { 
+                ctx.beginPath(); ctx.moveTo(fTR.x, fTR.y); ctx.lineTo(fBR.x, fBR.y); ctx.lineTo(bBR.x, bBR.y); ctx.lineTo(bTR.x, bTR.y); ctx.fill();
+            }
+            ctx.fillStyle = c.b; ctx.beginPath(); ctx.moveTo(bTL.x, bTL.y); ctx.lineTo(bTR.x, bTR.y); ctx.lineTo(bBR.x, bBR.y); ctx.lineTo(bBL.x, bBL.y); ctx.fill();
+
+            return { bTL, bTR, bBL, bBR }; 
+        }
+
+        function drawVehicle(worldX, worldZ, dims, c, isPlayer) {
+            // FIX: The Phantom "Donut" - Drawn as a proper 3D projected trapezoid
+            let sTL = project(worldX - dims.w/1.4, 0, worldZ + dims.lB);
+            let sTR = project(worldX + dims.w/1.4, 0, worldZ + dims.lB);
+            let sBL = project(worldX - dims.w/1.4, 0, worldZ);
+            let sBR = project(worldX + dims.w/1.4, 0, worldZ);
+            
+            if (sTL && sTR && sBL && sBR) { 
+                ctx.fillStyle = "rgba(0,0,0,0.5)"; 
+                ctx.beginPath();
+                ctx.moveTo(sTL.x, sTL.y); ctx.lineTo(sTR.x, sTR.y); 
+                ctx.lineTo(sBR.x, sBR.y); ctx.lineTo(sBL.x, sBL.y); 
+                ctx.fill(); 
+            }
+
+            let backFace = draw3DBox(worldX, worldZ, dims.w, dims.hB, dims.lB, c, 0);
+            draw3DBox(worldX, worldZ + dims.zOff, dims.w * 0.8, dims.hC, dims.lC, {f: "#111", t: "#222", s: "#0a0a0a", b: "#151515"}, dims.hB);
+
+            if (backFace) {
+                let tw = backFace.bTR.x - backFace.bTL.x, th = backFace.bBL.y - backFace.bTL.y;
+                let glow = (isPlayer && p1.turboActive) ? 35 : 5;
+                ctx.shadowBlur = glow; ctx.shadowColor = (isPlayer && p1.turboActive) ? "#00f0ff" : "red";
+                ctx.fillStyle = (isPlayer && p1.turboActive) ? "#00f0ff" : "red";
+                ctx.beginPath(); ctx.arc(backFace.bTL.x + tw*0.2, backFace.bTL.y + th*0.5, tw*0.12, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(backFace.bTR.x - tw*0.2, backFace.bTL.y + th*0.5, tw*0.12, 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        let q = traffic.filter(t => t.d > p1.dist - 100 && t.d < p1.dist + 1800).map(t => ({...t, isT: true}));
+        if(p2.dist > p1.dist - 100 && p2.dist < p1.dist + 1800) q.push({d: p2.dist, l: p2.lane, type: 'player', col: COLORS[0], isT: false});
+        q.push({d: p1.dist, l: p1.lane, type: 'player', col: { f: "#111", t: "#222", s: "#0a0a0a", b: "#151515" }, isT: false}); 
+        
+        q.sort((a,b) => b.d - a.d).forEach(obj => {
+            let worldX = (obj.l - 1) * 150;
+            drawVehicle(worldX, obj.d, V_DIMS[obj.type], obj.col, !obj.isT && obj.d === p1.dist);
+        });
+
+        if(p1.speed > 160) {
+            ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = p1.turboActive ? 3 : 1;
+            let cx = w/2, cy = horizon;
+            for(let i=0; i < (p1.turboActive ? 30 : 15); i++) {
+                let angle = Math.random() * Math.PI * 2;
+                let dist = 60 + Math.random() * (h/2); 
+                let length = (p1.speed/3) + Math.random()*80;
+                let sx = cx + Math.cos(angle)*dist;
+                let sy = cy + Math.sin(angle)*dist;
+                ctx.beginPath(); ctx.moveTo(sx, sy); 
+                ctx.lineTo(sx + Math.cos(angle)*length, sy + Math.sin(angle)*length); 
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+    }
+
+    function loop(t) { 
+        let dt = (t - lastTime) / 1000; 
+        if(!lastTime) dt = 0; 
+        lastTime = t; 
+        if (dt > 0.1) dt = 0.016;
+
+        if(gameState === 'RACE') { update(dt); }
+        draw();
+        requestAnimationFrame(loop); 
+    }
+
+    requestAnimationFrame(loop);
+
+    function endGame(msg, win) {
+        gameState = 'END';
+        showScreen('screen-gameover');
+        document.getElementById('mobile-controls').classList.add('hidden');
+        const title = document.getElementById('go-title');
+        const reason = document.getElementById('go-reason');
+        if(win){ title.innerText = "YOU WON!"; title.style.color = "#00ff00"; }
+        else   { title.innerText = "YOU LOST!"; title.style.color = "#ff0000"; }
+        reason.innerText = msg;
+    }
+
+    function leaveLobby(){
+        if(conn){ try{ conn.close(); } catch(e) {} conn = null; }
+        if(peer){ try{ peer.destroy(); } catch(e) {} peer = null; }
+        p1.ready = false; p2.ready = false;
+        showScreen('screen-menu');
+    }
+</script>
+</body>
+</html>
