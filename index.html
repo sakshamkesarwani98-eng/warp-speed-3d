@@ -3,8 +3,82 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>10K Hyper-Drive - Warp Speed 3D</title>
+    <title>10K Hyper-Drive - Warp Speed 3D (Cloud Edition)</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInWithPopup, 
+            GoogleAuthProvider, 
+            createUserWithEmailAndPassword, 
+            signInWithEmailAndPassword, 
+            onAuthStateChanged, 
+            signOut 
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // IMPORTANT: Replace with your actual Firebase Project keys
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const googleProvider = new GoogleAuthProvider();
+
+        window.playerName = "GUEST";
+
+        // Automatically route user based on login status
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                window.playerName = user.displayName || user.email.split('@')[0];
+                document.getElementById('player-name-display').innerText = "RACER: " + window.playerName.toUpperCase();
+                
+                // Fetch or Create Profile in Firestore
+                const userRef = doc(db, "users", user.uid);
+                const docSnap = await getDoc(userRef);
+                if (!docSnap.exists()) {
+                    await setDoc(userRef, { username: window.playerName, wins: 0, races: 0 });
+                }
+                
+                window.showScreen('screen-menu');
+            } else {
+                window.showScreen('screen-auth');
+            }
+        });
+
+        window.doSignUp = () => {
+            const email = document.getElementById('auth-email').value;
+            const pass = document.getElementById('auth-pass').value;
+            createUserWithEmailAndPassword(auth, email, pass)
+                .catch(err => document.getElementById('auth-error').innerText = err.message);
+        };
+
+        window.doSignIn = () => {
+            const email = document.getElementById('auth-email').value;
+            const pass = document.getElementById('auth-pass').value;
+            signInWithEmailAndPassword(auth, email, pass)
+                .catch(err => document.getElementById('auth-error').innerText = "Invalid Credentials.");
+        };
+
+        window.doGoogle = () => {
+            signInWithPopup(auth, googleProvider)
+                .catch(err => document.getElementById('auth-error').innerText = err.message);
+        };
+
+        window.doLogout = () => {
+            signOut(auth);
+        };
+    </script>
+
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; font-family: 'Arial Black', sans-serif; }
         body { background-color: #000; color: white; overflow: hidden; touch-action: none; }
@@ -12,10 +86,9 @@
         canvas { background: #87CEEB; height: 100%; width: 100%; max-width: 1400px; display: block; }
         
         #progress-container { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 50%; height: 12px; background: rgba(0,0,0,0.6); border: 2px solid #fff; border-radius: 6px; z-index: 5; }
-        #p1-icon { position: absolute; top: -12px; color: #00ffcc; font-size: 1.5rem; transition: left 0.1s linear; text-shadow: 0 0 5px #000; }
-        #p2-icon { position: absolute; top: -12px; color: #ff0055; font-size: 1.5rem; transition: left 0.1s linear; text-shadow: 0 0 5px #000; }
+        #p1-icon { position: absolute; top: -12px; color: #00ffcc; font-size: 1.5rem; transition: left 0.1s linear; text-shadow: 0 0 5px #000; z-index: 2; }
+        #p2-icon { position: absolute; top: -12px; color: #ff0055; font-size: 1.5rem; transition: left 0.1s linear; text-shadow: 0 0 5px #000; z-index: 1; }
 
-        /* HUD at Top-Left */
         #hud { position: absolute; top: 20px; left: 20px; z-index: 5; text-shadow: 2px 2px 4px #000; font-size: 1.8rem; pointer-events: none; }
         .hud-label { font-size: 1rem; color: #ccc; letter-spacing: 2px; }
         #nitro-container { position: relative; width: 220px; height: 20px; background: rgba(0,0,0,0.6); border: 2px solid #fff; margin-top: 5px; border-radius: 4px; overflow: hidden; }
@@ -24,7 +97,6 @@
 
         .turbo-active #nitro-fill { box-shadow: 0 0 20px #00f0ff; background: #fff; }
 
-        /* Fullscreen Button - Always Available */
         #fs-btn { position: absolute; top: 20px; right: 20px; z-index: 100; background: rgba(0,0,0,0.6); border: 2px solid #fff; color: #fff; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-size: 1rem; font-weight: bold; transition: background 0.2s;}
         #fs-btn:active { background: #fff; color: #000; }
 
@@ -39,12 +111,14 @@
         .screen { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); z-index: 30; backdrop-filter: blur(5px); }
         .hidden { display: none !important; }
         h1 { font-size: 4.5rem; text-transform: uppercase; margin-bottom: 1rem; text-shadow: 4px 4px 0 #000; text-align: center; line-height: 1.1; }
-        button.menu-btn { background: #fff; border: none; padding: 15px 60px; font-size: 1.5rem; font-weight: bold; cursor: pointer; margin: 10px; color: #000; border-radius: 4px; transition: transform 0.1s; }
+        button.menu-btn { background: #fff; border: none; padding: 15px 40px; font-size: 1.2rem; font-weight: bold; cursor: pointer; margin: 10px; color: #000; border-radius: 4px; transition: transform 0.1s; text-transform: uppercase;}
         button.menu-btn:active { transform: scale(0.95); }
-        input { padding: 15px; font-size: 1.5rem; text-align: center; border: 4px solid #fff; background: #222; color: #fff; margin-bottom: 20px; border-radius: 4px; text-transform: uppercase; }
+        input { padding: 15px; font-size: 1.2rem; text-align: center; border: 4px solid #fff; background: #222; color: #fff; margin-bottom: 10px; border-radius: 4px; }
         
         #countdown-ui { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 15rem; z-index: 25; font-weight: bold; pointer-events: none; text-shadow: 8px 8px 0 rgba(0,0,0,0.5); color: #fff; }
-        #screen-lobby button.menu-btn { margin: 8px 6px; }
+        
+        /* Auth Screen Specific */
+        .auth-container { background: rgba(255,255,255,0.1); padding: 40px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.2); display: flex; flex-direction: column; align-items: center; width: 90%; max-width: 500px; }
     </style>
 </head>
 <body>
@@ -77,32 +151,47 @@
 
     <div id="countdown-ui" class="hidden"></div>
 
-    <div id="screen-start" class="screen">
+    <div id="screen-auth" class="screen">
         <h1>WARP SPEED<br>3D</h1>
-        <p style="margin-bottom:30px; color:#fff; font-size:1.2rem; text-align: center;">W: ACCELERATE | A/D: STEER | SHIFT: NITRO<br><span style="font-size: 0.9rem; color: #aaa;">(Touch controls available on mobile)</span></p>
-        <button class="menu-btn" onclick="showScreen('screen-menu')">START ENGINE</button>
+        <div class="auth-container">
+            <h2 style="color:#00ffcc; margin-bottom: 20px; font-size: 1.5rem;">CLOUD DATALINK</h2>
+            <input type="email" id="auth-email" placeholder="EMAIL ADDRESS" style="text-transform: none; width: 100%;">
+            <input type="password" id="auth-pass" placeholder="PASSWORD" style="text-transform: none; width: 100%; margin-bottom: 20px;">
+            <div style="display:flex; gap:10px; width: 100%;">
+                <button class="menu-btn" onclick="window.doSignIn()" style="background:#00ffcc; flex: 1; margin: 0;">SIGN IN</button>
+                <button class="menu-btn" onclick="window.doSignUp()" style="background:#444; color:#fff; flex: 1; margin: 0;">SIGN UP</button>
+            </div>
+            <div style="margin: 20px 0; width: 100%; height: 2px; background: rgba(255,255,255,0.2);"></div>
+            <button class="menu-btn" onclick="window.doGoogle()" style="background:#fff; color:#000; width: 100%; margin: 0; display:flex; align-items:center; justify-content:center; gap: 10px;">
+                <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                LOGIN WITH GOOGLE
+            </button>
+            <p id="auth-error" style="color: #ff4444; margin-top: 15px; font-size: 1rem; text-align:center; height: 1.5rem;"></p>
+        </div>
     </div>
 
     <div id="screen-menu" class="screen hidden">
-        <h2 style="font-size:3rem; margin-bottom: 30px;">MULTIPLAYER</h2>
+        <h2 id="player-name-display" style="font-size:1.5rem; color:#fff; margin-bottom: 10px;">RACER: ---</h2>
+        <h2 style="font-size:3.5rem; margin-bottom: 30px; text-shadow: 2px 2px 0 #000;">MULTIPLAYER</h2>
         <button class="menu-btn" onclick="hostRoom()" style="background:#00ffcc;">HOST GAME</button>
-        <input type="text" id="join-code" placeholder="ENTER CODE">
+        <input type="text" id="join-code" placeholder="ENTER CODE" style="margin-top: 15px;">
         <button class="menu-btn" onclick="joinRoom()" style="background:#ff0055; color:#fff;">JOIN GAME</button>
+        <button class="menu-btn" onclick="window.doLogout()" style="background:transparent; border: 2px solid #fff; color:#fff; margin-top: 30px; font-size: 1rem; padding: 10px 30px;">LOGOUT</button>
     </div>
 
     <div id="screen-lobby" class="screen hidden">
-        <h2 id="lobby-code-display" style="font-size:3rem; color:#00ffcc;">ROOM: ---</h2>
-        <div id="lobby-status" style="font-size:1.5rem; margin: 20px 0;">WAITING...</div>
+        <h2 id="lobby-code-display" style="font-size:3.5rem; color:#00ffcc; text-shadow: 2px 2px 0 #000;">ROOM: ---</h2>
+        <div id="lobby-status" style="font-size:1.5rem; margin: 20px 0;">WAITING FOR OPPONENT...</div>
         <button id="btn-ready" class="menu-btn hidden" onclick="toggleReady()">READY UP</button>
-        <div style="margin-top:20px;">
-            <button class="menu-btn" onclick="leaveLobby()" style="background:#ff4444; color:#fff;">BACK TO MENU</button>
+        <div style="margin-top:30px;">
+            <button class="menu-btn" onclick="leaveLobby()" style="background:#ff4444; color:#fff;">LEAVE LOBBY</button>
         </div>
     </div>
 
     <div id="screen-gameover" class="screen hidden">
         <h1 id="go-title">RACE OVER</h1>
         <p id="go-reason" style="font-size:1.5rem; margin-bottom:2rem;"></p>
-        <button class="menu-btn" onclick="location.reload()">RETURN TO MENU</button>
+        <button class="menu-btn" onclick="leaveLobby()">RETURN TO MENU</button>
     </div>
 
 <script>
@@ -112,9 +201,9 @@
     const WORLD_SPEED_MULT = 4.0; 
     const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-    let peer, conn, isHost = false, gameState = 'START';
-    let p1 = { lane: 1, camLane: 1, dist: 0, speed: 0, nitro: 100, turboActive: false, nitroLocked: false, ready: false, dead: false };
-    let p2 = { lane: 1, dist: 0, ready: false, dead: false };
+    let peer, conn, isHost = false, gameState = 'AUTH';
+    let p1 = { lane: 1, camLane: 1, dist: 0, speed: 0, nitro: 100, turboActive: false, nitroLocked: false, ready: false, dead: false, name: "P1" };
+    let p2 = { lane: 1, dist: 0, ready: false, dead: false, name: "P2" };
     let traffic = [], keys = {}, lastTime = 0, netTimer = 0;
 
     const V_DIMS = {
@@ -137,7 +226,10 @@
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     window.onresize = resize; resize();
 
-    function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); if(id) document.getElementById(id).classList.remove('hidden'); }
+    window.showScreen = function(id) { 
+        document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); 
+        if(id) document.getElementById(id).classList.remove('hidden'); 
+    };
 
     function toggleFullscreen() {
         if (!document.fullscreenElement) {
@@ -161,32 +253,65 @@
     function hostRoom() { 
         const code = Math.random().toString(36).substring(2,7).toUpperCase(); 
         peer = new Peer(code); 
-        peer.on('open', () => { isHost = true; showScreen('screen-lobby'); document.getElementById('lobby-code-display').innerText = "ROOM: " + code; }); 
+        peer.on('open', () => { 
+            isHost = true; 
+            window.showScreen('screen-lobby'); 
+            document.getElementById('lobby-code-display').innerText = "ROOM: " + code; 
+            p1.name = window.playerName;
+        }); 
         peer.on('connection', c => { conn = c; setupConn(); }); 
         peer.on('error', err => { console.warn('Peer error', err); document.getElementById('lobby-status').innerText = "NETWORK ERROR"; });
     }
+
     function joinRoom() { 
         const code = document.getElementById('join-code').value.toUpperCase(); if(!code) return; 
         peer = new Peer(); 
-        peer.on('open', () => { conn = peer.connect(code); setupConn(); showScreen('screen-lobby'); }); 
+        peer.on('open', () => { 
+            conn = peer.connect(code); 
+            p1.name = window.playerName;
+            setupConn(); 
+            window.showScreen('screen-lobby'); 
+        }); 
         peer.on('error', err => { console.warn('Peer error', err); document.getElementById('lobby-status').innerText = "CONNECT FAILED"; });
     }
+    
+    window.addEventListener('beforeunload', () => {
+        if (conn && conn.open) conn.close();
+    });
+
     function setupConn() {
-        conn.on('open', () => { document.getElementById('lobby-status').innerText = "LINK ESTABLISHED"; document.getElementById('btn-ready').classList.remove('hidden'); });
-        conn.on('close', () => { document.getElementById('lobby-status').innerText = "DISCONNECTED"; });
+        conn.on('open', () => { 
+            document.getElementById('lobby-status').innerText = "LINK ESTABLISHED"; 
+            document.getElementById('btn-ready').classList.remove('hidden'); 
+            // Exchange Usernames instantly upon connecting
+            conn.send({ type: 'handshake', name: p1.name });
+        });
+        
+        conn.on('close', () => { 
+            if (gameState === 'RACE') {
+                endGame("OPPONENT LEFT!", true);
+            } else {
+                document.getElementById('lobby-status').innerText = "DISCONNECTED"; 
+                document.getElementById('btn-ready').classList.add('hidden');
+            }
+        });
+        
         conn.on('data', data => {
+            if(data.type === 'handshake') { p2.name = data.name; document.getElementById('lobby-status').innerText = `RACING AGAINST: ${p2.name.toUpperCase()}`; }
             if(data.type === 'ready') { p2.ready = data.val; checkStart(); }
             if(data.type === 'traffic') traffic = data.val;
             if(data.type === 'sync') { 
                 p2.dist = data.dist || p2.dist; 
                 p2.lane = (typeof data.lane === 'number') ? data.lane : p2.lane; 
-                if(data.dead) endGame("OPPONENT WRECKED!", true);
+                if(data.dead) endGame(`${p2.name.toUpperCase()} WRECKED!`, true);
             }
         });
     }
+
     function toggleReady() { 
         p1.ready = !p1.ready; 
         document.getElementById('btn-ready').style.background = p1.ready ? "#0f0" : "#fff"; 
+        document.getElementById('btn-ready').style.color = p1.ready ? "#000" : "#000"; 
         if(conn && conn.open) conn.send({type: 'ready', val: p1.ready}); 
         checkStart(); 
     }
@@ -196,7 +321,6 @@
             if(isHost) {
                 traffic = [];
                 let types = ['compact', 'sedan', 'suv', 'truck'];
-                // Fixed speed prevents traffic cars from driving through each other
                 for (let d = 800; d < 9500; d += 350 + Math.random()*150) {
                     let openLane = Math.floor(Math.random() * 3); 
                     for (let lane = 0; lane < 3; lane++) {
@@ -215,7 +339,7 @@
     }
 
     function startCountdown() {
-        showScreen(null); gameState = 'COUNTDOWN';
+        window.showScreen(null); gameState = 'COUNTDOWN';
         const ui = document.getElementById('countdown-ui'); ui.classList.remove('hidden');
         if(isTouchDevice) document.getElementById('mobile-controls').classList.remove('hidden');
 
@@ -225,7 +349,11 @@
             count--; 
             ui.innerText = count > 0 ? count : "GO!"; 
             if(count < 0) { 
-                clearInterval(t); ui.classList.add('hidden'); document.querySelectorAll('#hud, #progress-container').forEach(e => e.classList.remove('hidden')); gameState = 'RACE'; lastTime = performance.now(); 
+                clearInterval(t); 
+                ui.classList.add('hidden'); 
+                document.querySelectorAll('#hud, #progress-container').forEach(e => e.classList.remove('hidden')); 
+                gameState = 'RACE'; 
+                lastTime = performance.now(); 
             } 
         }, 1000);
     }
@@ -252,12 +380,15 @@
             if (p1.nitro < 100) p1.nitro += 15 * dt;
         }
 
-        // Auto-Gas triggered when Mobile Nitro is held
         let gasPressed = keys['KeyW'] || keys['ArrowUp'] || (isTouchDevice && keys['ShiftLeft']);
-        let target = gasPressed ? (p1.turboActive ? 320 : 180) : 0;
-        let acc = (p1.speed < target) ? 140 : 250; 
-        p1.speed = Math.min(target, p1.speed + acc * dt);
-        if (!gasPressed && p1.speed > 0) p1.speed -= 100 * dt;
+        
+        if (gasPressed) {
+            let targetSpeed = p1.turboActive ? 320 : 180;
+            let acc = (p1.speed < targetSpeed) ? 140 : 250; 
+            p1.speed = Math.min(targetSpeed, p1.speed + acc * dt);
+        } else {
+            p1.speed = Math.max(0, p1.speed - 60 * dt);
+        }
 
         let distGain = (p1.speed * 0.277 * WORLD_SPEED_MULT) * dt;
         if (p1.dist > 9500) {
@@ -434,7 +565,6 @@
             }
         }
 
-        // Z-Sorting logic applied to ensure proper 3D rendering order
         let q = traffic.filter(t => t.d > p1.dist - 100 && t.d < p1.dist + 1800).map(t => ({...t, isT: true}));
         if(p2.dist > p1.dist - 100 && p2.dist < p1.dist + 1800) q.push({d: p2.dist, l: p2.lane, type: 'player', col: COLORS[0], isT: false});
         q.push({d: p1.dist, l: p1.lane, type: 'player', col: { f: "#111", t: "#222", s: "#0a0a0a", b: "#151515" }, isT: false}); 
@@ -468,7 +598,7 @@
         if (dt > 0.1) dt = 0.016;
 
         if(gameState === 'RACE') { update(dt); }
-        draw();
+        if(gameState !== 'AUTH') { draw(); }
         requestAnimationFrame(loop); 
     }
 
@@ -476,20 +606,25 @@
 
     function endGame(msg, win) {
         gameState = 'END';
-        showScreen('screen-gameover');
+        window.showScreen('screen-gameover');
         document.getElementById('mobile-controls').classList.add('hidden');
+        document.querySelectorAll('#hud, #progress-container').forEach(e => e.classList.add('hidden')); 
         const title = document.getElementById('go-title');
         const reason = document.getElementById('go-reason');
         if(win){ title.innerText = "YOU WON!"; title.style.color = "#00ff00"; }
         else   { title.innerText = "YOU LOST!"; title.style.color = "#ff0000"; }
         reason.innerText = msg;
+        
+        // FUTURE: Save result to Firestore here
     }
 
     function leaveLobby(){
         if(conn){ try{ conn.close(); } catch(e) {} conn = null; }
         if(peer){ try{ peer.destroy(); } catch(e) {} peer = null; }
         p1.ready = false; p2.ready = false;
-        showScreen('screen-menu');
+        document.getElementById('btn-ready').style.background = "#fff";
+        document.getElementById('btn-ready').classList.add('hidden');
+        window.showScreen('screen-menu');
     }
 </script>
 </body>
