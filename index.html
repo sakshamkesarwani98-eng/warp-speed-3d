@@ -11,14 +11,15 @@
         import { getAuth, signInWithPopup, GoogleAuthProvider, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        // IMPORTANT: Replace with your Firebase Keys
+        // Your Firebase configuration integrated
         const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
+            apiKey: "AIzaSyDppG77Saed8i49ZzeTlgougqRfYwV0D4s",
+            authDomain: "warpspeed3d-771b7.firebaseapp.com",
+            projectId: "warpspeed3d-771b7",
+            storageBucket: "warpspeed3d-771b7.firebasestorage.app",
+            messagingSenderId: "468140398821",
+            appId: "1:468140398821:web:3ef49e7332cbfd1fe9dc0c",
+            measurementId: "G-JZTTZ5FSR7"
         };
 
         const app = initializeApp(firebaseConfig);
@@ -518,7 +519,7 @@
 
         let focalLength = p1.turboActive ? h * 0.35 : h * 0.55; 
 
-        // No shake effect applied here. Clean projection.
+        // Clean projection without camera shake
         function project(worldX, worldY, worldZ) {
             let dz = worldZ - p1.dist;
             if(dz < -50) return null; 
