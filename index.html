@@ -3,23 +3,15 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>10K Hyper-Drive - Warp Speed 3D (Cloud Edition)</title>
+    <title>Warp Speed 3D - 10-Player Cloud Hub</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { 
-            getAuth, 
-            signInWithPopup, 
-            GoogleAuthProvider, 
-            createUserWithEmailAndPassword, 
-            signInWithEmailAndPassword, 
-            onAuthStateChanged, 
-            signOut 
-        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        // IMPORTANT: Replace with your actual Firebase Project keys
+        // IMPORTANT: Replace with your Firebase Keys
         const firebaseConfig = {
             apiKey: "YOUR_API_KEY",
             authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
@@ -34,49 +26,71 @@
         const db = getFirestore(app);
         const googleProvider = new GoogleAuthProvider();
 
-        window.playerName = "GUEST";
+        window.playerName = "";
+        window.userUID = "";
 
-        // Automatically route user based on login status
+        // Identity Gate & Routing
         onAuthStateChanged(auth, async (user) => {
             if (user) {
-                window.playerName = user.displayName || user.email.split('@')[0];
-                document.getElementById('player-name-display').innerText = "RACER: " + window.playerName.toUpperCase();
-                
-                // Fetch or Create Profile in Firestore
-                const userRef = doc(db, "users", user.uid);
-                const docSnap = await getDoc(userRef);
-                if (!docSnap.exists()) {
-                    await setDoc(userRef, { username: window.playerName, wins: 0, races: 0 });
+                window.userUID = user.uid;
+                if (user.isAnonymous) {
+                    window.playerName = "GUEST_" + Math.floor(1000 + Math.random() * 9000);
+                    updateHUDName();
+                    window.showScreen('screen-menu');
+                } else {
+                    // Check if Google user already has a claimed username
+                    const userDoc = await getDoc(doc(db, "users", user.uid));
+                    if (userDoc.exists() && userDoc.data().username) {
+                        window.playerName = userDoc.data().username;
+                        updateHUDName();
+                        window.showScreen('screen-menu');
+                    } else {
+                        // Force new Google users to claim a name
+                        window.showScreen('screen-username-gate');
+                    }
                 }
-                
-                window.showScreen('screen-menu');
             } else {
-                window.showScreen('screen-auth');
+                window.showScreen('screen-auth-main');
             }
         });
 
-        window.doSignUp = () => {
-            const email = document.getElementById('auth-email').value;
-            const pass = document.getElementById('auth-pass').value;
-            createUserWithEmailAndPassword(auth, email, pass)
-                .catch(err => document.getElementById('auth-error').innerText = err.message);
+        // Unique Username Claim Logic (Transactions prevent duplicates)
+        window.claimUsername = async () => {
+            const inputName = document.getElementById('gate-name-input').value.trim().toUpperCase();
+            const errDiv = document.getElementById('gate-err');
+            if (inputName.length < 3 || inputName.length > 12) {
+                errDiv.innerText = "NAME MUST BE 3-12 CHARACTERS"; return;
+            }
+            if (inputName.startsWith("GUEST")) {
+                errDiv.innerText = "NAME CANNOT START WITH GUEST"; return;
+            }
+            
+            errDiv.innerText = "CHECKING DATABASE...";
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const nameRef = doc(db, "usernames", inputName);
+                    const nameDoc = await transaction.get(nameRef);
+                    if (nameDoc.exists()) throw "NAME TAKEN. TRY ANOTHER.";
+                    
+                    const userRef = doc(db, "users", window.userUID);
+                    transaction.set(nameRef, { uid: window.userUID });
+                    transaction.set(userRef, { username: inputName, wins: 0, races: 0 });
+                });
+                window.playerName = inputName;
+                updateHUDName();
+                window.showScreen('screen-menu');
+            } catch (e) {
+                errDiv.innerText = e;
+            }
         };
 
-        window.doSignIn = () => {
-            const email = document.getElementById('auth-email').value;
-            const pass = document.getElementById('auth-pass').value;
-            signInWithEmailAndPassword(auth, email, pass)
-                .catch(err => document.getElementById('auth-error').innerText = "Invalid Credentials.");
-        };
+        window.doGuest = () => signInAnonymously(auth);
+        window.doGoogle = () => signInWithPopup(auth, googleProvider);
+        window.doLogout = () => signOut(auth);
 
-        window.doGoogle = () => {
-            signInWithPopup(auth, googleProvider)
-                .catch(err => document.getElementById('auth-error').innerText = err.message);
-        };
-
-        window.doLogout = () => {
-            signOut(auth);
-        };
+        function updateHUDName() {
+            document.getElementById('hud-player-name').innerText = "RACER: " + window.playerName;
+        }
     </script>
 
     <style>
@@ -85,57 +99,59 @@
         #game-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; background: #000; }
         canvas { background: #87CEEB; height: 100%; width: 100%; max-width: 1400px; display: block; }
         
-        #progress-container { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 50%; height: 12px; background: rgba(0,0,0,0.6); border: 2px solid #fff; border-radius: 6px; z-index: 5; }
-        #p1-icon { position: absolute; top: -12px; color: #00ffcc; font-size: 1.5rem; transition: left 0.1s linear; text-shadow: 0 0 5px #000; z-index: 2; }
-        #p2-icon { position: absolute; top: -12px; color: #ff0055; font-size: 1.5rem; transition: left 0.1s linear; text-shadow: 0 0 5px #000; z-index: 1; }
-
-        #hud { position: absolute; top: 20px; left: 20px; z-index: 5; text-shadow: 2px 2px 4px #000; font-size: 1.8rem; pointer-events: none; }
+        /* Permanent HUD Name */
+        #hud-player-name { position: absolute; top: 20px; left: 20px; z-index: 40; font-size: 1.2rem; color: #00ffcc; text-shadow: 2px 2px 0 #000; pointer-events: none; }
+        
+        /* Racing HUD */
+        #hud { position: absolute; top: 50px; left: 20px; z-index: 5; text-shadow: 2px 2px 4px #000; font-size: 1.8rem; pointer-events: none; }
         .hud-label { font-size: 1rem; color: #ccc; letter-spacing: 2px; }
         #nitro-container { position: relative; width: 220px; height: 20px; background: rgba(0,0,0,0.6); border: 2px solid #fff; margin-top: 5px; border-radius: 4px; overflow: hidden; }
         #nitro-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00f0ff, #00ffcc); transition: width 0.1s; }
-        #nitro-min-line { position: absolute; left: 25%; top: 0; height: 100%; width: 2px; background: rgba(255, 0, 0, 0.8); z-index: 2; box-shadow: 0 0 4px red;}
 
-        .turbo-active #nitro-fill { box-shadow: 0 0 20px #00f0ff; background: #fff; }
+        .screen { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 30; backdrop-filter: blur(8px); }
+        .hidden { display: none !important; }
+        
+        h1 { font-size: 5rem; text-transform: uppercase; margin-bottom: 2rem; text-align: center; color: #fff; text-shadow: 4px 4px 0px #000; line-height: 1; }
+        .btn { padding: 15px 30px; margin: 10px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; text-transform: uppercase; font-size: 1.2rem; transition: transform 0.1s; text-align: center; }
+        .btn:active { transform: scale(0.95); }
+        .btn-main { background: #00ffcc; color: #000; }
+        .btn-google { background: #fff; color: #000; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 1.5rem; padding: 20px 40px;}
+        .btn-alt { background: #ff0055; color: #fff; }
+        .btn-guest { position: absolute; bottom: 20px; right: 20px; background: rgba(255,255,255,0.1); color: #ccc; border: 1px solid #ccc; font-size: 0.9rem; padding: 10px 20px; }
+        
+        input { padding: 15px; font-size: 1.2rem; text-align: center; border: 4px solid #fff; background: #222; color: #00ffcc; margin-bottom: 10px; border-radius: 4px; width: 300px; text-transform: uppercase;}
+        
+        /* Lobby Grid */
+        #lobby-grid { width: 90%; max-width: 600px; background: rgba(0,0,0,0.6); border: 2px solid #333; border-radius: 10px; padding: 20px; margin: 20px 0; max-height: 40vh; overflow-y: auto;}
+        .lobby-slot { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #444; font-size: 1.2rem; }
+        .slot-creator { color: #FFD700; font-weight: bold; }
+        .btn-kick { background: #ff4444; color: #fff; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.9rem; }
 
-        #fs-btn { position: absolute; top: 20px; right: 20px; z-index: 100; background: rgba(0,0,0,0.6); border: 2px solid #fff; color: #fff; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-size: 1rem; font-weight: bold; transition: background 0.2s;}
-        #fs-btn:active { background: #fff; color: #000; }
-
+        /* Mobile Controls */
         #mobile-controls { position: absolute; bottom: 20px; left: 0; width: 100vw; display: flex; justify-content: space-between; padding: 0 20px; z-index: 20; pointer-events: none; }
-        #mc-left, #mc-right { display: flex; gap: 10px; align-items: flex-end; }
+        #mc-left { display: flex; gap: 10px; align-items: flex-end; }
+        #mc-right { display: flex; gap: 10px; align-items: flex-end; position: relative;}
         .touch-btn { pointer-events: auto; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.5); border-radius: 12px; color: #fff; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; touch-action: none; font-weight: bold; }
         .touch-btn:active { background: rgba(255,255,255,0.4); }
-        .btn-steer { width: 65px; height: 65px; border-radius: 50%; }
+        .btn-steer { width: 70px; height: 70px; border-radius: 50%; }
         #btn-gas { width: 85px; height: 85px; background: rgba(0, 255, 100, 0.2); border-color: #0f8; }
-        #btn-nitro { width: 75px; height: 65px; background: rgba(0, 240, 255, 0.2); border-color: #0ff; font-size: 1rem;}
+        #btn-brake { position: absolute; right: 0; bottom: 95px; width: 85px; height: 60px; background: rgba(255, 0, 0, 0.2); border-color: #f00; font-size: 1rem;}
+        #btn-nitro { width: 75px; height: 65px; background: rgba(0, 240, 255, 0.2); border-color: #0ff; font-size: 1rem; margin-right: 85px;}
 
-        .screen { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); z-index: 30; backdrop-filter: blur(5px); }
-        .hidden { display: none !important; }
-        h1 { font-size: 4.5rem; text-transform: uppercase; margin-bottom: 1rem; text-shadow: 4px 4px 0 #000; text-align: center; line-height: 1.1; }
-        button.menu-btn { background: #fff; border: none; padding: 15px 40px; font-size: 1.2rem; font-weight: bold; cursor: pointer; margin: 10px; color: #000; border-radius: 4px; transition: transform 0.1s; text-transform: uppercase;}
-        button.menu-btn:active { transform: scale(0.95); }
-        input { padding: 15px; font-size: 1.2rem; text-align: center; border: 4px solid #fff; background: #222; color: #fff; margin-bottom: 10px; border-radius: 4px; }
-        
         #countdown-ui { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 15rem; z-index: 25; font-weight: bold; pointer-events: none; text-shadow: 8px 8px 0 rgba(0,0,0,0.5); color: #fff; }
-        
-        /* Auth Screen Specific */
-        .auth-container { background: rgba(255,255,255,0.1); padding: 40px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.2); display: flex; flex-direction: column; align-items: center; width: 90%; max-width: 500px; }
     </style>
 </head>
 <body>
 
-    <button id="fs-btn" onclick="toggleFullscreen()">FULLSCREEN</button>
-
     <div id="game-container"><canvas id="gameCanvas"></canvas></div>
-    <div id="progress-container" class="hidden"><div id="p2-icon">▼</div><div id="p1-icon">▲</div></div>
+    
+    <div id="hud-player-name"></div>
 
     <div id="hud" class="hidden">
         <div><span class="hud-label">SPEED</span> <br><span id="hud-speed">0</span> KM/H</div>
-        <div style="margin-top:10px;"><span class="hud-label">DISTANCE</span> <br><span id="hud-dist">0</span> M</div>
-        <div style="margin-top:20px;" class="hud-label">NITROUS OXIDE</div>
-        <div id="nitro-container">
-            <div id="nitro-fill"></div>
-            <div id="nitro-min-line"></div>
-        </div>
+        <div style="margin-top:10px;"><span class="hud-label">DISTANCE</span> <br><span id="hud-dist">0</span> / 10000M</div>
+        <div style="margin-top:20px;" class="hud-label">NITROUS</div>
+        <div id="nitro-container"><div id="nitro-fill"></div></div>
     </div>
 
     <div id="mobile-controls" class="hidden">
@@ -145,83 +161,104 @@
         </div>
         <div id="mc-right">
             <div id="btn-nitro" class="touch-btn">NITRO</div>
+            <div id="btn-brake" class="touch-btn">BRAKE</div>
             <div id="btn-gas" class="touch-btn">GAS</div>
         </div>
     </div>
 
     <div id="countdown-ui" class="hidden"></div>
 
-    <div id="screen-auth" class="screen">
+    <div id="screen-auth-main" class="screen hidden">
         <h1>WARP SPEED<br>3D</h1>
-        <div class="auth-container">
-            <h2 style="color:#00ffcc; margin-bottom: 20px; font-size: 1.5rem;">CLOUD DATALINK</h2>
-            <input type="email" id="auth-email" placeholder="EMAIL ADDRESS" style="text-transform: none; width: 100%;">
-            <input type="password" id="auth-pass" placeholder="PASSWORD" style="text-transform: none; width: 100%; margin-bottom: 20px;">
-            <div style="display:flex; gap:10px; width: 100%;">
-                <button class="menu-btn" onclick="window.doSignIn()" style="background:#00ffcc; flex: 1; margin: 0;">SIGN IN</button>
-                <button class="menu-btn" onclick="window.doSignUp()" style="background:#444; color:#fff; flex: 1; margin: 0;">SIGN UP</button>
-            </div>
-            <div style="margin: 20px 0; width: 100%; height: 2px; background: rgba(255,255,255,0.2);"></div>
-            <button class="menu-btn" onclick="window.doGoogle()" style="background:#fff; color:#000; width: 100%; margin: 0; display:flex; align-items:center; justify-content:center; gap: 10px;">
-                <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                LOGIN WITH GOOGLE
-            </button>
-            <p id="auth-error" style="color: #ff4444; margin-top: 15px; font-size: 1rem; text-align:center; height: 1.5rem;"></p>
-        </div>
+        <button class="btn btn-google" onclick="window.doGoogle()">
+            <svg width="30" height="30" viewBox="0 0 24 24" style="margin-right:10px;"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            CONTINUE WITH GOOGLE
+        </button>
+        <button class="btn btn-guest" onclick="window.doGuest()">PLAY AS GUEST</button>
+    </div>
+
+    <div id="screen-username-gate" class="screen hidden">
+        <h2 style="font-size:2.5rem; margin-bottom: 20px;">CLAIM YOUR HANDLE</h2>
+        <p style="margin-bottom:20px; color:#ccc;">This name will represent you in the 10-player hub.</p>
+        <input type="text" id="gate-name-input" placeholder="UNIQUE USERNAME" maxlength="12">
+        <button class="btn btn-main" onclick="window.claimUsername()">CLAIM HANDLE</button>
+        <div id="gate-err" style="color:#ff4444; margin-top:15px; height:20px; font-weight:bold;"></div>
     </div>
 
     <div id="screen-menu" class="screen hidden">
-        <h2 id="player-name-display" style="font-size:1.5rem; color:#fff; margin-bottom: 10px;">RACER: ---</h2>
-        <h2 style="font-size:3.5rem; margin-bottom: 30px; text-shadow: 2px 2px 0 #000;">MULTIPLAYER</h2>
-        <button class="menu-btn" onclick="hostRoom()" style="background:#00ffcc;">HOST GAME</button>
-        <input type="text" id="join-code" placeholder="ENTER CODE" style="margin-top: 15px;">
-        <button class="menu-btn" onclick="joinRoom()" style="background:#ff0055; color:#fff;">JOIN GAME</button>
-        <button class="menu-btn" onclick="window.doLogout()" style="background:transparent; border: 2px solid #fff; color:#fff; margin-top: 30px; font-size: 1rem; padding: 10px 30px;">LOGOUT</button>
+        <h1>THE HUB</h1>
+        <button class="btn btn-main" style="width: 300px;" onclick="window.showScreen('screen-host-setup')">HOST RACE</button>
+        <button class="btn btn-alt" style="width: 300px;" onclick="window.showScreen('screen-join-setup')">JOIN RACE</button>
+        <button class="btn" style="background:transparent; border: 2px solid #fff; color:#fff; margin-top: 50px;" onclick="window.doLogout()">LOGOUT</button>
+    </div>
+
+    <div id="screen-host-setup" class="screen hidden">
+        <h2>ROOM CONFIG</h2>
+        <input type="text" id="host-pass" placeholder="OPTIONAL PASSWORD">
+        <button class="btn btn-main" onclick="hostRoom()">CREATE LOBBY</button>
+        <button class="btn" onclick="window.showScreen('screen-menu')">BACK</button>
+    </div>
+
+    <div id="screen-join-setup" class="screen hidden">
+        <h2>JOIN ROOM</h2>
+        <input type="text" id="join-code" placeholder="ENTER 5-DIGIT CODE">
+        <input type="text" id="join-pass" placeholder="PASSWORD (IF REQUIRED)">
+        <button class="btn btn-alt" onclick="joinRoom()">CONNECT</button>
+        <button class="btn" onclick="window.showScreen('screen-menu')">BACK</button>
     </div>
 
     <div id="screen-lobby" class="screen hidden">
-        <h2 id="lobby-code-display" style="font-size:3.5rem; color:#00ffcc; text-shadow: 2px 2px 0 #000;">ROOM: ---</h2>
-        <div id="lobby-status" style="font-size:1.5rem; margin: 20px 0;">WAITING FOR OPPONENT...</div>
-        <button id="btn-ready" class="menu-btn hidden" onclick="toggleReady()">READY UP</button>
-        <div style="margin-top:30px;">
-            <button class="menu-btn" onclick="leaveLobby()" style="background:#ff4444; color:#fff;">LEAVE LOBBY</button>
-        </div>
+        <h2 id="lobby-code-display" style="font-size:3.5rem; color:#00ffcc;">ROOM: ---</h2>
+        <p id="lobby-status" style="color:#ccc; margin-bottom: 10px;"></p>
+        
+        <div id="lobby-grid">
+            </div>
+
+        <button id="btn-start-race" class="btn btn-main hidden" onclick="hostStartRace()">START ENGINE</button>
+        <button class="btn" style="background:#ff4444; color:#fff; margin-top:20px;" onclick="leaveLobby()">LEAVE LOBBY</button>
     </div>
 
     <div id="screen-gameover" class="screen hidden">
         <h1 id="go-title">RACE OVER</h1>
         <p id="go-reason" style="font-size:1.5rem; margin-bottom:2rem;"></p>
-        <button class="menu-btn" onclick="leaveLobby()">RETURN TO MENU</button>
+        <button class="btn btn-main" onclick="leaveLobby()">RETURN TO HUB</button>
     </div>
 
 <script>
+    // --- ENGINE CORE ---
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const TOTAL_DIST = 10000;
-    const WORLD_SPEED_MULT = 4.0; 
     const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-    let peer, conn, isHost = false, gameState = 'AUTH';
-    let p1 = { lane: 1, camLane: 1, dist: 0, speed: 0, nitro: 100, turboActive: false, nitroLocked: false, ready: false, dead: false, name: "P1" };
-    let p2 = { lane: 1, dist: 0, ready: false, dead: false, name: "P2" };
+    // Networking State
+    let peer, isHost = false, roomCode = "", roomPass = "", myPeerId = "";
+    let clients = []; // Array of guest objects: { conn, id, name, ready, dist, lane, speed, dead, colorIdx }
+    let hostConnToLobby = null; // Guest's connection to host
+    let gameState = 'AUTH'; // AUTH, MENU, LOBBY, COUNTDOWN, RACE, END
+    
+    // Player State
+    let p1 = { lane: 1, camLane: 1, dist: 0, speed: 0, nitro: 100, turboActive: false, isBraking: false, dead: false, colIdx: 0 };
     let traffic = [], keys = {}, lastTime = 0, netTimer = 0;
+
+    const COLORS = [
+        { f: "#b02", t: "#d03", s: "#801", b: "#e04" }, // Red
+        { f: "#15b", t: "#26c", s: "#049", b: "#37d" }, // Blue
+        { f: "#182", t: "#293", s: "#061", b: "#3a4" }, // Green
+        { f: "#aa1", t: "#bb2", s: "#880", b: "#cc3" }, // Yellow
+        { f: "#80d", t: "#91e", s: "#60b", b: "#a2f" }, // Purple
+        { f: "#d60", t: "#f80", s: "#a40", b: "#fa2" }, // Orange
+        { f: "#199", t: "#2aa", s: "#077", b: "#3bb" }, // Cyan
+        { f: "#e17", t: "#f28", s: "#c05", b: "#f39" }, // Pink
+        { f: "#ddd", t: "#eee", s: "#bbb", b: "#fff" }, // White
+        { f: "#333", t: "#444", s: "#111", b: "#555" }  // Black
+    ];
 
     const V_DIMS = {
         player:  { w: 45, hB: 18, hC: 14, lB: 100, lC: 45, zOff: 25 },
         compact: { w: 40, hB: 16, hC: 15, lB: 85,  lC: 40, zOff: 20 },
-        sedan:   { w: 48, hB: 18, hC: 14, lB: 110, lC: 50, zOff: 30 },
-        suv:     { w: 55, hB: 28, hC: 22, lB: 125, lC: 60, zOff: 35 },
-        truck:   { w: 65, hB: 45, hC: 30, lB: 280, lC: 50, zOff: 230 } 
+        suv:     { w: 55, hB: 28, hC: 22, lB: 125, lC: 60, zOff: 35 }
     };
-
-    const COLORS = [
-        { f: "#b02", t: "#d03", s: "#801", b: "#e04" },
-        { f: "#15b", t: "#26c", s: "#049", b: "#37d" },
-        { f: "#182", t: "#293", s: "#061", b: "#3a4" },
-        { f: "#aa1", t: "#bb2", s: "#880", b: "#cc3" },
-        { f: "#ddd", t: "#eee", s: "#bbb", b: "#fff" },
-        { f: "#333", t: "#444", s: "#111", b: "#555" } 
-    ];
 
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     window.onresize = resize; resize();
@@ -231,204 +268,241 @@
         if(id) document.getElementById(id).classList.remove('hidden'); 
     };
 
-    function toggleFullscreen() {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(e => console.log(e));
-        } else {
-            document.exitFullscreen();
-        }
-    }
-
-    function bindTouch(btnId, keyCode) {
+    // --- CONTROLS ---
+    function bindTouch(btnId, keyCodes) {
         const btn = document.getElementById(btnId);
-        btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyCode] = true; });
-        btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[keyCode] = false; });
-        btn.addEventListener('touchcancel', (e) => { e.preventDefault(); keys[keyCode] = false; });
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); keyCodes.forEach(k => keys[k] = true); });
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); keyCodes.forEach(k => keys[k] = false); });
+        btn.addEventListener('touchcancel', (e) => { e.preventDefault(); keyCodes.forEach(k => keys[k] = false); });
     }
-    bindTouch('btn-left', 'ArrowLeft');
-    bindTouch('btn-right', 'ArrowRight');
-    bindTouch('btn-gas', 'ArrowUp');
-    bindTouch('btn-nitro', 'ShiftLeft');
-
-    function hostRoom() { 
-        const code = Math.random().toString(36).substring(2,7).toUpperCase(); 
-        peer = new Peer(code); 
-        peer.on('open', () => { 
-            isHost = true; 
-            window.showScreen('screen-lobby'); 
-            document.getElementById('lobby-code-display').innerText = "ROOM: " + code; 
-            p1.name = window.playerName;
-        }); 
-        peer.on('connection', c => { conn = c; setupConn(); }); 
-        peer.on('error', err => { console.warn('Peer error', err); document.getElementById('lobby-status').innerText = "NETWORK ERROR"; });
-    }
-
-    function joinRoom() { 
-        const code = document.getElementById('join-code').value.toUpperCase(); if(!code) return; 
-        peer = new Peer(); 
-        peer.on('open', () => { 
-            conn = peer.connect(code); 
-            p1.name = window.playerName;
-            setupConn(); 
-            window.showScreen('screen-lobby'); 
-        }); 
-        peer.on('error', err => { console.warn('Peer error', err); document.getElementById('lobby-status').innerText = "CONNECT FAILED"; });
-    }
+    bindTouch('btn-left', ['ArrowLeft', 'KeyA']);
+    bindTouch('btn-right', ['ArrowRight', 'KeyD']);
+    bindTouch('btn-gas', ['ArrowUp', 'KeyW']);
+    bindTouch('btn-brake', ['ArrowDown', 'KeyS']);
+    bindTouch('btn-nitro', ['ShiftLeft']);
     
-    window.addEventListener('beforeunload', () => {
-        if (conn && conn.open) conn.close();
-    });
+    window.onkeydown = e => { keys[e.code] = true; };
+    window.onkeyup = e => { keys[e.code] = false; };
 
-    function setupConn() {
-        conn.on('open', () => { 
-            document.getElementById('lobby-status').innerText = "LINK ESTABLISHED"; 
-            document.getElementById('btn-ready').classList.remove('hidden'); 
-            // Exchange Usernames instantly upon connecting
-            conn.send({ type: 'handshake', name: p1.name });
-        });
+    // --- NETWORKING (10-PLAYER HUB) ---
+    function hostRoom() {
+        roomPass = document.getElementById('host-pass').value.trim();
+        roomCode = Math.random().toString(36).substring(2,7).toUpperCase();
+        peer = new Peer(roomCode);
         
-        conn.on('close', () => { 
-            if (gameState === 'RACE') {
-                endGame("OPPONENT LEFT!", true);
-            } else {
-                document.getElementById('lobby-status').innerText = "DISCONNECTED"; 
-                document.getElementById('btn-ready').classList.add('hidden');
-            }
+        peer.on('open', (id) => {
+            isHost = true; myPeerId = id; clients = [];
+            window.showScreen('screen-lobby');
+            document.getElementById('lobby-code-display').innerText = "ROOM: " + roomCode;
+            document.getElementById('lobby-status').innerText = roomPass ? "LOBBY SECURED WITH PASSWORD" : "WAITING FOR RACERS...";
+            p1.colIdx = 0; // Host is color 0
+            updateLobbyUI();
         });
-        
-        conn.on('data', data => {
-            if(data.type === 'handshake') { p2.name = data.name; document.getElementById('lobby-status').innerText = `RACING AGAINST: ${p2.name.toUpperCase()}`; }
-            if(data.type === 'ready') { p2.ready = data.val; checkStart(); }
-            if(data.type === 'traffic') traffic = data.val;
-            if(data.type === 'sync') { 
-                p2.dist = data.dist || p2.dist; 
-                p2.lane = (typeof data.lane === 'number') ? data.lane : p2.lane; 
-                if(data.dead) endGame(`${p2.name.toUpperCase()} WRECKED!`, true);
-            }
-        });
-    }
 
-    function toggleReady() { 
-        p1.ready = !p1.ready; 
-        document.getElementById('btn-ready').style.background = p1.ready ? "#0f0" : "#fff"; 
-        document.getElementById('btn-ready').style.color = p1.ready ? "#000" : "#000"; 
-        if(conn && conn.open) conn.send({type: 'ready', val: p1.ready}); 
-        checkStart(); 
-    }
-
-    function checkStart() {
-        if(p1.ready && p2.ready) {
-            if(isHost) {
-                traffic = [];
-                let types = ['compact', 'sedan', 'suv', 'truck'];
-                for (let d = 800; d < 9500; d += 350 + Math.random()*150) {
-                    let openLane = Math.floor(Math.random() * 3); 
-                    for (let lane = 0; lane < 3; lane++) {
-                        if (lane === openLane) continue; 
-                        if (Math.random() < 0.75) { 
-                            let type = types[Math.floor(Math.random() * types.length)];
-                            let col = COLORS[Math.floor(Math.random() * COLORS.length)];
-                            traffic.push({ d: d, l: lane, s: 75, type: type, col: col });
-                        }
-                    }
+        peer.on('connection', conn => {
+            conn.on('data', data => {
+                if (data.type === 'join_request') {
+                    if (clients.length >= 9) { conn.send({type: 'rejected', msg: 'ROOM FULL'}); setTimeout(()=>conn.close(), 500); return; }
+                    if (roomPass && data.pass !== roomPass) { conn.send({type: 'rejected', msg: 'INVALID PASSWORD'}); setTimeout(()=>conn.close(), 500); return; }
+                    
+                    // Accept guest
+                    clients.push({ conn: conn, id: conn.peer, name: data.name, dist: 0, lane: 1, speed: 0, dead: false, isBraking: false, colIdx: clients.length + 1 });
+                    conn.send({type: 'accepted', colIdx: clients.length});
+                    broadcastLobbyState();
                 }
-                if(conn && conn.open) conn.send({type:'traffic', val: traffic});
+                if (data.type === 'sync' && gameState === 'RACE') {
+                    let c = clients.find(c => c.id === conn.peer);
+                    if (c) { c.dist = data.dist; c.lane = data.lane; c.speed = data.speed; c.dead = data.dead; c.isBraking = data.isBraking; }
+                }
+            });
+            conn.on('close', () => {
+                clients = clients.filter(c => c.id !== conn.peer);
+                if (gameState === 'LOBBY') broadcastLobbyState();
+                checkRemainingPlayers();
+            });
+        });
+    }
+
+    function joinRoom() {
+        roomCode = document.getElementById('join-code').value.toUpperCase();
+        roomPass = document.getElementById('join-pass').value;
+        if (!roomCode) return;
+        
+        peer = new Peer();
+        peer.on('open', (id) => {
+            myPeerId = id; isHost = false; clients = [];
+            hostConnToLobby = peer.connect(roomCode);
+            
+            hostConnToLobby.on('open', () => {
+                hostConnToLobby.send({ type: 'join_request', name: window.playerName, pass: roomPass });
+            });
+            
+            hostConnToLobby.on('data', data => {
+                if(data.type === 'rejected') { alert(data.msg); leaveLobby(); }
+                if(data.type === 'accepted') { p1.colIdx = data.colIdx; window.showScreen('screen-lobby'); document.getElementById('lobby-code-display').innerText = "ROOM: " + roomCode; }
+                if(data.type === 'kicked') { alert("REMOVED BY CREATOR"); leaveLobby(); }
+                if(data.type === 'lobby_state') { clients = data.clients; updateLobbyUI(); }
+                if(data.type === 'start_race') { traffic = data.traffic; startCountdown(); }
+                if(data.type === 'game_sync') { clients = data.clients; traffic = data.traffic; checkRemainingPlayers(); }
+            });
+            
+            hostConnToLobby.on('close', () => {
+                if(gameState === 'RACE') endGame("HOST DISCONNECTED", true);
+                else { alert("LOBBY CLOSED"); leaveLobby(); }
+            });
+        });
+    }
+
+    // Host specifically manages kicking and broadcasting lobby UI
+    function broadcastLobbyState() {
+        if (!isHost) return;
+        let safeClients = clients.map(c => ({ id: c.id, name: c.name, dist: c.dist, lane: c.lane, speed: c.speed, dead: c.dead, isBraking: c.isBraking, colIdx: c.colIdx }));
+        clients.forEach(c => c.conn.send({ type: 'lobby_state', clients: safeClients }));
+        updateLobbyUI();
+    }
+
+    window.kickPlayer = (peerId) => {
+        let c = clients.find(c => c.id === peerId);
+        if (c) { c.conn.send({type: 'kicked'}); setTimeout(()=>c.conn.close(), 500); }
+        clients = clients.filter(c => c.id !== peerId);
+        broadcastLobbyState();
+    };
+
+    function updateLobbyUI() {
+        const grid = document.getElementById('lobby-grid');
+        grid.innerHTML = "";
+        
+        // Slot 1: Creator
+        let hostName = isHost ? window.playerName : (clients.length > 0 ? "HOST" : "---");
+        if(!isHost && clients.length>0 && clients[0].isHostMark) hostName = clients[0].name; // workaround for guest view
+        
+        grid.innerHTML += `<div class="lobby-slot"><span class="slot-creator">1. ${isHost ? window.playerName : "CREATOR"} (CREATOR)</span></div>`;
+        
+        // Slots 2-10
+        let displayList = isHost ? clients : clients;
+        for (let i = 0; i < 9; i++) {
+            if (i < displayList.length) {
+                let c = displayList[i];
+                let kickBtn = isHost ? `<button class="btn-kick" onclick="window.kickPlayer('${c.id}')">KICK</button>` : '';
+                grid.innerHTML += `<div class="lobby-slot"><span>${i+2}. ${c.name}</span> ${kickBtn}</div>`;
+            } else {
+                grid.innerHTML += `<div class="lobby-slot" style="color:#666;"><span>${i+2}. [ EMPTY SLOT ]</span></div>`;
             }
-            startCountdown();
+        }
+
+        if (isHost) {
+            const startBtn = document.getElementById('btn-start-race');
+            if (clients.length > 0) startBtn.classList.remove('hidden');
+            else startBtn.classList.add('hidden');
         }
     }
+
+    window.hostStartRace = () => {
+        if (!isHost || clients.length === 0) return;
+        // Generate Traffic Map
+        traffic = [];
+        let types = ['compact', 'suv'];
+        for (let d = 800; d < 9500; d += 350 + Math.random()*150) {
+            let openLane = Math.floor(Math.random() * 3); 
+            for (let lane = 0; lane < 3; lane++) {
+                if (lane === openLane) continue; 
+                if (Math.random() < 0.6) traffic.push({ d: d, l: lane, s: 70, type: types[Math.floor(Math.random()*types.length)], col: COLORS[8] });
+            }
+        }
+        
+        clients.forEach(c => c.conn.send({ type: 'start_race', traffic: traffic }));
+        startCountdown();
+    };
 
     function startCountdown() {
         window.showScreen(null); gameState = 'COUNTDOWN';
         const ui = document.getElementById('countdown-ui'); ui.classList.remove('hidden');
         if(isTouchDevice) document.getElementById('mobile-controls').classList.remove('hidden');
 
-        p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; p1.nitroLocked = false;
+        p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false;
         let count = 3; ui.innerText = count;
         let t = setInterval(() => { 
             count--; 
             ui.innerText = count > 0 ? count : "GO!"; 
             if(count < 0) { 
-                clearInterval(t); 
-                ui.classList.add('hidden'); 
-                document.querySelectorAll('#hud, #progress-container').forEach(e => e.classList.remove('hidden')); 
-                gameState = 'RACE'; 
-                lastTime = performance.now(); 
+                clearInterval(t); ui.classList.add('hidden'); 
+                document.getElementById('hud').classList.remove('hidden');
+                gameState = 'RACE'; lastTime = performance.now(); 
             } 
         }, 1000);
     }
 
-    window.onkeydown = e => { keys[e.code] = true; };
-    window.onkeyup = e => { keys[e.code] = false; };
-
+    // --- GAME LOOP & PHYSICS ---
     function update(dt) {
+        // Steering
         let steerSpeed = 4.5; 
         if(keys['KeyA'] || keys['ArrowLeft']) p1.lane -= steerSpeed * dt;
         if(keys['KeyD'] || keys['ArrowRight']) p1.lane += steerSpeed * dt;
         p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); 
         p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
 
-        if (p1.nitro < 25 && !p1.turboActive) p1.nitroLocked = true;
-        if (p1.nitro >= 25) p1.nitroLocked = false;
-
-        if (keys['ShiftLeft'] && p1.speed > 80 && !p1.nitroLocked && p1.nitro > 0) {
-            p1.turboActive = true;
-            p1.nitro -= 33 * dt; 
-            if(p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; p1.nitroLocked = true; }
+        // Gas, Brake & Coasting
+        p1.isBraking = keys['KeyS'] || keys['ArrowDown'];
+        let gasPressed = keys['KeyW'] || keys['ArrowUp'];
+        
+        if (keys['ShiftLeft'] && p1.speed > 80 && p1.nitro > 0) {
+            p1.turboActive = true; p1.nitro -= 33 * dt;
         } else {
             p1.turboActive = false;
             if (p1.nitro < 100) p1.nitro += 15 * dt;
         }
 
-        let gasPressed = keys['KeyW'] || keys['ArrowUp'] || (isTouchDevice && keys['ShiftLeft']);
-        
-        if (gasPressed) {
+        if (p1.isBraking) {
+            p1.speed = Math.max(0, p1.speed - 400 * dt); // Hard brake
+        } else if (gasPressed) {
             let targetSpeed = p1.turboActive ? 320 : 180;
-            let acc = (p1.speed < targetSpeed) ? 140 : 250; 
-            p1.speed = Math.min(targetSpeed, p1.speed + acc * dt);
+            p1.speed = Math.min(targetSpeed, p1.speed + 150 * dt);
         } else {
-            p1.speed = Math.max(0, p1.speed - 60 * dt);
+            p1.speed = Math.max(0, p1.speed - 40 * dt); // Coasting friction
         }
 
-        let distGain = (p1.speed * 0.277 * WORLD_SPEED_MULT) * dt;
-        if (p1.dist > 9500) {
-            distGain *= 2; 
-        }
-        p1.dist += distGain;
+        p1.dist += (p1.speed * 0.277 * 4.0) * dt; // 4.0 world mult
 
+        // Traffic Collision
         traffic.forEach(t => {
-            let rel = (t.s - p1.speed) * 0.277 * WORLD_SPEED_MULT;
-            t.d += rel * dt;
-
+            if(isHost) t.d += ((t.s * 0.277 * 4.0) * dt); // Only host updates traffic position directly
             let lBound = V_DIMS[t.type].lB;
-            let zOverlap = Math.abs(p1.dist - t.d) < (lBound * 0.6); 
-            let xOverlap = Math.abs(p1.lane - t.l) < 0.40; 
-            
-            if(zOverlap && xOverlap && !p1.dead) {
+            if(Math.abs(p1.dist - t.d) < (lBound * 0.6) && Math.abs(p1.lane - t.l) < 0.40 && !p1.dead) {
                 p1.dead = true;
-                if(conn && conn.open) conn.send({type: 'sync', dist: p1.dist, lane: p1.lane, dead: true});
+                if(!isHost) hostConnToLobby.send({type: 'sync', dist: p1.dist, lane: p1.lane, speed: 0, dead: true, isBraking: false});
                 endGame("WRECKED!", false);
             }
         });
 
         if(p1.dist >= TOTAL_DIST) {
-            if(conn && conn.open) conn.send({type: 'sync', dist: p1.dist, lane: p1.lane, dead: false});
-            endGame("VICTORY!", true);
+            if(!isHost) hostConnToLobby.send({type: 'sync', dist: p1.dist, lane: p1.lane, speed: 0, dead: false, isBraking: false});
+            endGame("RACE FINISHED!", true);
         }
 
+        // Networking Sync
         netTimer += dt;
-        if(netTimer > 0.1) {
-            if(conn && conn.open) conn.send({type: 'sync', dist: p1.dist, lane: p1.lane, dead: p1.dead});
+        if(netTimer > 0.05) {
+            if(isHost) {
+                let safeClients = clients.map(c => ({ id: c.id, name: c.name, dist: c.dist, lane: c.lane, speed: c.speed, dead: c.dead, isBraking: c.isBraking, colIdx: c.colIdx }));
+                safeClients.push({ id: myPeerId, name: window.playerName, dist: p1.dist, lane: p1.lane, speed: p1.speed, dead: p1.dead, isBraking: p1.isBraking, colIdx: p1.colIdx }); // Include host
+                clients.forEach(c => c.conn.send({type: 'game_sync', clients: safeClients, traffic: traffic}));
+            } else {
+                hostConnToLobby.send({type: 'sync', dist: p1.dist, lane: p1.lane, speed: p1.speed, dead: p1.dead, isBraking: p1.isBraking});
+            }
             netTimer = 0;
         }
 
         document.getElementById('hud-speed').innerText = Math.floor(p1.speed);
         document.getElementById('hud-dist').innerText = Math.floor(p1.dist);
         document.getElementById('nitro-fill').style.width = p1.nitro + "%";
-        document.getElementById('nitro-fill').style.background = p1.nitroLocked ? "linear-gradient(90deg, #ff4444, #ff0000)" : "linear-gradient(90deg, #00f0ff, #00ffcc)";
-        document.getElementById('p1-icon').style.left = Math.min((p1.dist / TOTAL_DIST * 100), 100) + "%";
-        document.getElementById('p2-icon').style.left = Math.min((p2.dist / TOTAL_DIST * 100), 100) + "%";
-        document.body.className = p1.turboActive ? "turbo-active" : "";
+    }
+
+    function checkRemainingPlayers() {
+        if(gameState !== 'RACE') return;
+        let aliveOthers = clients.filter(c => c.id !== myPeerId && !c.dead);
+        if(aliveOthers.length === 0 && clients.length > 0) {
+            endGame("ALL OPPONENTS WRECKED OR LEFT!", true);
+        }
     }
 
     function draw() {
@@ -437,17 +511,14 @@
 
         let horizon = h * 0.45;
         let skyGrad = ctx.createLinearGradient(0, 0, 0, horizon);
-        skyGrad.addColorStop(0, "#87CEEB"); skyGrad.addColorStop(1, "#63B8FF");
+        skyGrad.addColorStop(0, "#0a0a2a"); skyGrad.addColorStop(1, "#3a1c71"); // Night Synthwave vibe
         ctx.fillStyle = skyGrad; ctx.fillRect(0,0,w,h);
-
-        ctx.fillStyle = "#2E8B57"; ctx.fillRect(0, horizon, w, h-horizon);
-
-        ctx.globalAlpha = 0.95;
-        ctx.fillStyle = "#FFD700"; ctx.beginPath(); ctx.arc(w*0.8, horizon - 80, 60, 0, Math.PI*2); ctx.fill();
-        ctx.globalAlpha = 1.0;
+        
+        ctx.fillStyle = "#111"; ctx.fillRect(0, horizon, w, h-horizon); // Ground
 
         let focalLength = p1.turboActive ? h * 0.35 : h * 0.55; 
 
+        // No shake effect applied here. Clean projection.
         function project(worldX, worldY, worldZ) {
             let dz = worldZ - p1.dist;
             if(dz < -50) return null; 
@@ -456,63 +527,26 @@
             return { x: w/2 + (worldX - camX)*scale, y: horizon + (worldY + 120)*scale, s: scale };
         }
 
+        // Road
         let r1 = project(-300, 0, p1.dist - 50); let r2 = project(300, 0, p1.dist - 50);
         let r3 = project(300, 0, p1.dist + 1800); let r4 = project(-300, 0, p1.dist + 1800);
         if(r1 && r3) {
-            ctx.fillStyle = "#282b2e"; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.lineTo(r4.x, horizon); ctx.fill();
-            ctx.strokeStyle = "#fff"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r4.x, horizon); ctx.stroke(); ctx.beginPath(); ctx.moveTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.stroke();
+            ctx.fillStyle = "#222"; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.lineTo(r4.x, horizon); ctx.fill();
+            ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r4.x, horizon); ctx.stroke(); ctx.beginPath(); ctx.moveTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.stroke();
         }
 
-        let totalCycle = 30; 
+        // Lane Lines
+        let totalCycle = 40; 
         ctx.fillStyle = "#fff";
         for(let z = Math.floor(p1.dist/totalCycle)*totalCycle; z < p1.dist + 1800; z += totalCycle) {
-            let pL1 = project(-100, 0, z); let pL2 = project(-100, 0, z + 15);
-            let pR1 = project(100, 0, z); let pR2 = project(100, 0, z + 15);
+            let pL1 = project(-100, 0, z); let pL2 = project(-100, 0, z + 20);
+            let pR1 = project(100, 0, z); let pR2 = project(100, 0, z + 20);
             if (pL1 && pL2 && pL1.y > horizon) {
                 ctx.beginPath(); ctx.moveTo(pL1.x - 2*pL1.s, pL1.y); ctx.lineTo(pL1.x + 2*pL1.s, pL1.y); ctx.lineTo(pL2.x + 2*pL2.s, pL2.y); ctx.lineTo(pL2.x - 2*pL2.s, pL2.y); ctx.fill();
             }
             if (pR1 && pR2 && pR1.y > horizon) {
                 ctx.beginPath(); ctx.moveTo(pR1.x - 2*pR1.s, pR1.y); ctx.lineTo(pR1.x + 2*pR1.s, pR1.y); ctx.lineTo(pR2.x + 2*pR2.s, pR2.y); ctx.lineTo(pR2.x - 2*pR2.s, pR2.y); ctx.fill();
             }
-        }
-
-        let flZ = TOTAL_DIST;
-        if (flZ > p1.dist - 100 && flZ < p1.dist + 1800) {
-            let flP1 = project(-300, 0, flZ); let flP2 = project(300, 0, flZ);
-            let flP3 = project(300, 0, flZ + 60); let flP4 = project(-300, 0, flZ + 60);
-            
-            if (flP1 && flP3 && flP1.y > horizon) {
-                let cols = 12;
-                let stepX1 = (flP2.x - flP1.x) / cols;
-                let stepX2 = (flP3.x - flP4.x) / cols;
-                for(let i=0; i<cols; i++) {
-                    ctx.fillStyle = (i%2 === 0) ? "#fff" : "#000";
-                    ctx.beginPath();
-                    ctx.moveTo(flP1.x + i*stepX1, flP1.y);
-                    ctx.lineTo(flP1.x + (i+1)*stepX1, flP1.y);
-                    ctx.lineTo(flP4.x + (i+1)*stepX2, flP4.y);
-                    ctx.lineTo(flP4.x + i*stepX2, flP4.y);
-                    ctx.fill();
-                }
-            }
-
-            function drawPole(x) {
-                let base = project(x, 0, flZ);
-                let top = project(x, -250, flZ);
-                if (base && top && base.y > horizon) {
-                    ctx.fillStyle = "#888";
-                    let pw = Math.max(8 * base.s, 1);
-                    ctx.fillRect(top.x - pw/2, top.y, pw, base.y - top.y); 
-                    
-                    ctx.fillStyle = "#ff0000";
-                    ctx.fillRect(top.x, top.y, 100 * top.s, 60 * top.s); 
-                    ctx.fillStyle = "#ffffff";
-                    ctx.fillRect(top.x + 10*top.s, top.y + 10*top.s, 30*top.s, 20*top.s);
-                    ctx.fillRect(top.x + 40*top.s, top.y + 30*top.s, 30*top.s, 20*top.s);
-                }
-            }
-            drawPole(-340);
-            drawPole(340);
         }
 
         function draw3DBox(worldX, worldZ, wSize, hSize, lSize, c, yOff) {
@@ -537,45 +571,54 @@
             return { bTL, bTR, bBL, bBR }; 
         }
 
-        function drawVehicle(worldX, worldZ, dims, c, isPlayer) {
-            let sTL = project(worldX - dims.w/1.4, 0, worldZ + dims.lB);
-            let sTR = project(worldX + dims.w/1.4, 0, worldZ + dims.lB);
-            let sBL = project(worldX - dims.w/1.4, 0, worldZ);
-            let sBR = project(worldX + dims.w/1.4, 0, worldZ);
-            
-            if (sTL && sTR && sBL && sBR && sTL.y > horizon) { 
-                ctx.fillStyle = "rgba(0,0,0,0.5)"; 
-                ctx.beginPath();
-                ctx.moveTo(sTL.x, sTL.y); ctx.lineTo(sTR.x, sTR.y); 
-                ctx.lineTo(sBR.x, sBR.y); ctx.lineTo(sBL.x, sBL.y); 
-                ctx.fill(); 
+        // Object Queue
+        let q = traffic.filter(t => t.d > p1.dist - 100 && t.d < p1.dist + 1800).map(t => ({...t, isOpp: false}));
+        
+        clients.forEach(c => {
+            if(c.id !== myPeerId && !c.dead && c.dist > p1.dist - 100 && c.dist < p1.dist + 1800) {
+                q.push({d: c.dist, l: c.lane, type: 'player', col: COLORS[c.colIdx % COLORS.length], isOpp: true, name: c.name, brake: c.isBraking});
             }
-
-            let backFace = draw3DBox(worldX, worldZ, dims.w, dims.hB, dims.lB, c, 0);
-            draw3DBox(worldX, worldZ + dims.zOff, dims.w * 0.8, dims.hC, dims.lC, {f: "#111", t: "#222", s: "#0a0a0a", b: "#151515"}, dims.hB);
-
-            if (backFace) {
-                let tw = backFace.bTR.x - backFace.bTL.x, th = backFace.bBL.y - backFace.bTL.y;
-                let glow = (isPlayer && p1.turboActive) ? 35 : 5;
-                ctx.shadowBlur = glow; ctx.shadowColor = (isPlayer && p1.turboActive) ? "#00f0ff" : "red";
-                ctx.fillStyle = (isPlayer && p1.turboActive) ? "#00f0ff" : "red";
-                ctx.beginPath(); ctx.arc(backFace.bTL.x + tw*0.2, backFace.bTL.y + th*0.5, tw*0.12, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.arc(backFace.bTR.x - tw*0.2, backFace.bTL.y + th*0.5, tw*0.12, 0, Math.PI*2); ctx.fill();
-                ctx.shadowBlur = 0;
-            }
-        }
-
-        let q = traffic.filter(t => t.d > p1.dist - 100 && t.d < p1.dist + 1800).map(t => ({...t, isT: true}));
-        if(p2.dist > p1.dist - 100 && p2.dist < p1.dist + 1800) q.push({d: p2.dist, l: p2.lane, type: 'player', col: COLORS[0], isT: false});
-        q.push({d: p1.dist, l: p1.lane, type: 'player', col: { f: "#111", t: "#222", s: "#0a0a0a", b: "#151515" }, isT: false}); 
+        });
+        
+        q.push({d: p1.dist, l: p1.lane, type: 'player', col: COLORS[p1.colIdx % COLORS.length], isOpp: false, isMe: true, brake: p1.isBraking}); 
         
         q.sort((a,b) => b.d - a.d).forEach(obj => {
             let worldX = (obj.l - 1) * 150;
-            drawVehicle(worldX, obj.d, V_DIMS[obj.type], obj.col, !obj.isT && obj.d === p1.dist);
+            let dims = V_DIMS[obj.type];
+            let backFace = draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0);
+            draw3DBox(worldX, obj.d + dims.zOff, dims.w * 0.8, dims.hC, dims.lC, {f: "#111", t: "#222", s: "#0a0a0a", b: "#151515"}, dims.hB);
+
+            // Taillights
+            if (backFace) {
+                let tw = backFace.bTR.x - backFace.bTL.x, th = backFace.bBL.y - backFace.bTL.y;
+                let isBraking = obj.brake;
+                let glow = isBraking ? 20 : 5;
+                ctx.shadowBlur = glow; ctx.shadowColor = "red";
+                ctx.fillStyle = isBraking ? "#ff0000" : "#aa0000";
+                
+                // Draw lights
+                ctx.beginPath(); ctx.arc(backFace.bTL.x + tw*0.2, backFace.bTL.y + th*0.5, tw*(isBraking?0.18:0.12), 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(backFace.bTR.x - tw*0.2, backFace.bTL.y + th*0.5, tw*(isBraking?0.18:0.12), 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            // Floating Name Tag (For Opponents)
+            if (obj.isOpp && backFace) {
+                let tagP = project(worldX, -(dims.hC + dims.hB + 50), obj.d);
+                if (tagP && tagP.y > horizon) {
+                    ctx.fillStyle = "#fff";
+                    ctx.font = Math.max(12 * tagP.s, 8) + "px 'Arial Black'";
+                    ctx.textAlign = "center";
+                    ctx.fillText(obj.name, tagP.x, tagP.y - (10*tagP.s));
+                    ctx.fillStyle = "#00ffcc";
+                    ctx.fillText("▼", tagP.x, tagP.y);
+                }
+            }
         });
 
+        // Speed lines
         if(p1.speed > 160) {
-            ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = p1.turboActive ? 3 : 1;
+            ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = p1.turboActive ? 3 : 1;
             let cx = w/2, cy = horizon;
             for(let i=0; i < (p1.turboActive ? 30 : 15); i++) {
                 let angle = Math.random() * Math.PI * 2;
@@ -598,34 +641,32 @@
         if (dt > 0.1) dt = 0.016;
 
         if(gameState === 'RACE') { update(dt); }
-        if(gameState !== 'AUTH') { draw(); }
+        if(gameState !== 'AUTH' && gameState !== 'MENU') { draw(); }
         requestAnimationFrame(loop); 
     }
-
     requestAnimationFrame(loop);
 
     function endGame(msg, win) {
+        if(gameState === 'END') return;
         gameState = 'END';
         window.showScreen('screen-gameover');
         document.getElementById('mobile-controls').classList.add('hidden');
-        document.querySelectorAll('#hud, #progress-container').forEach(e => e.classList.add('hidden')); 
+        document.getElementById('hud').classList.add('hidden'); 
         const title = document.getElementById('go-title');
-        const reason = document.getElementById('go-reason');
-        if(win){ title.innerText = "YOU WON!"; title.style.color = "#00ff00"; }
-        else   { title.innerText = "YOU LOST!"; title.style.color = "#ff0000"; }
-        reason.innerText = msg;
-        
-        // FUTURE: Save result to Firestore here
+        title.innerText = win ? "YOU SURVIVED!" : "YOU WRECKED!"; 
+        title.style.color = win ? "#00ffcc" : "#ff4444";
+        document.getElementById('go-reason').innerText = msg;
     }
 
-    function leaveLobby(){
-        if(conn){ try{ conn.close(); } catch(e) {} conn = null; }
-        if(peer){ try{ peer.destroy(); } catch(e) {} peer = null; }
-        p1.ready = false; p2.ready = false;
-        document.getElementById('btn-ready').style.background = "#fff";
-        document.getElementById('btn-ready').classList.add('hidden');
+    function leaveLobby() {
+        if(hostConnToLobby) { try{ hostConnToLobby.close(); } catch(e) {} hostConnToLobby = null; }
+        if(peer) { try{ peer.destroy(); } catch(e) {} peer = null; }
+        clients = []; isHost = false;
         window.showScreen('screen-menu');
+        gameState = 'MENU';
     }
+    
+    window.addEventListener('beforeunload', leaveLobby);
 </script>
 </body>
 </html>
