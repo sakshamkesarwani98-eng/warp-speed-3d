@@ -11,7 +11,6 @@
         import { getAuth, signInWithPopup, GoogleAuthProvider, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        // Your Firebase configuration integrated
         const firebaseConfig = {
             apiKey: "AIzaSyDppG77Saed8i49ZzeTlgougqRfYwV0D4s",
             authDomain: "warpspeed3d-771b7.firebaseapp.com",
@@ -30,7 +29,6 @@
         window.playerName = "";
         window.userUID = "";
 
-        // Identity Gate & Routing
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 window.userUID = user.uid;
@@ -53,55 +51,37 @@
             }
         });
 
-        // Unique Username Claim Logic
         window.claimUsername = async () => {
             const inputName = document.getElementById('gate-name-input').value.trim().toUpperCase();
             const errDiv = document.getElementById('gate-err');
             
-            if (!/^[A-Z]+$/.test(inputName)) {
-                errDiv.innerText = "LETTERS A-Z ONLY. NO NUMBERS OR SYMBOLS."; return;
-            }
-            if (inputName.length < 3 || inputName.length > 12) {
-                errDiv.innerText = "NAME MUST BE 3-12 CHARACTERS"; return;
-            }
-            if (inputName.startsWith("GUEST")) {
-                errDiv.innerText = "NAME CANNOT START WITH GUEST"; return;
-            }
+            if (!/^[A-Z]+$/.test(inputName)) { errDiv.innerText = "LETTERS A-Z ONLY."; return; }
+            if (inputName.length < 3 || inputName.length > 12) { errDiv.innerText = "NAME MUST BE 3-12 CHARACTERS"; return; }
+            if (inputName.startsWith("GUEST")) { errDiv.innerText = "NAME CANNOT START WITH GUEST"; return; }
             
             errDiv.innerText = "CHECKING DATABASE...";
             try {
                 await runTransaction(db, async (transaction) => {
                     const nameRef = doc(db, "usernames", inputName);
-                    const nameDoc = await transaction.get(nameRef);
-                    if (nameDoc.exists()) throw "NAME TAKEN. TRY ANOTHER.";
-                    
-                    const userRef = doc(db, "users", window.userUID);
+                    if ((await transaction.get(nameRef)).exists()) throw "NAME TAKEN. TRY ANOTHER.";
                     transaction.set(nameRef, { uid: window.userUID });
-                    transaction.set(userRef, { username: inputName, wins: 0, races: 0 });
+                    transaction.set(doc(db, "users", window.userUID), { username: inputName, wins: 0, races: 0 });
                 });
                 window.playerName = inputName;
                 updateHUDName();
                 window.showScreen('screen-menu');
-            } catch (e) {
-                errDiv.innerText = e;
-            }
+            } catch (e) { errDiv.innerText = e; }
         };
 
-        // Isolated Quick Race with Double-Spawn Shield
         window.isSearchingQuickRace = false;
         window.findQuickRace = async () => {
             if (window.isSearchingQuickRace) return;
             window.isSearchingQuickRace = true;
-
             const btn = document.querySelector('#screen-menu .btn-main');
-            const originalText = btn.innerText;
-            btn.innerText = "SEARCHING...";
-            btn.disabled = true;
-
+            btn.innerText = "SEARCHING..."; btn.disabled = true;
             try {
                 const publicRef = doc(db, "matchmaking", "LATEST_PUBLIC");
                 const snap = await getDoc(publicRef);
-                
                 if (snap.exists() && (Date.now() - snap.data().timestamp < 30000)) {
                     document.getElementById('join-code').value = snap.data().code;
                     document.getElementById('join-pass').value = "";
@@ -112,22 +92,14 @@
                     document.getElementById('host-pass').value = ""; 
                     window.hostRoom(newCode); 
                 }
-            } catch (e) {
-                console.error(e);
-            } finally {
-                btn.innerText = originalText;
-                btn.disabled = false;
-                window.isSearchingQuickRace = false;
-            }
+            } catch (e) { console.error(e); } 
+            finally { btn.innerText = "⚡ QUICK RACE"; btn.disabled = false; window.isSearchingQuickRace = false; }
         };
 
         window.doGuest = () => signInAnonymously(auth);
         window.doGoogle = () => signInWithPopup(auth, googleProvider);
         window.doLogout = () => signOut(auth);
-
-        function updateHUDName() {
-            document.getElementById('hud-player-name').innerText = "RACER: " + window.playerName;
-        }
+        function updateHUDName() { document.getElementById('hud-player-name').innerText = "RACER: " + window.playerName; }
     </script>
 
     <style>
@@ -136,7 +108,6 @@
         #game-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; background: #000; }
         canvas { background: #87CEEB; height: 100%; width: 100%; max-width: 1400px; display: block; }
         
-        /* Top Position Bar */
         #progress-bar { position: absolute; top: 0; left: 0; width: 100vw; height: 12px; background: rgba(0,0,0,0.6); z-index: 50; border-bottom: 2px solid #333;}
         .prog-pip { position: absolute; top: -4px; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; transition: left 0.1s linear; box-shadow: 0 0 10px rgba(0,0,0,0.8); }
 
@@ -176,6 +147,9 @@
         #btn-nitro { width: 75px; height: 65px; background: rgba(0, 240, 255, 0.2); border-color: #0ff; font-size: 1rem; margin-right: 85px;}
 
         #countdown-ui { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 15rem; z-index: 25; font-weight: bold; pointer-events: none; text-shadow: 8px 8px 0 rgba(0,0,0,0.5); color: #fff; }
+        
+        #spectator-ui { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 45; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; border: 2px solid #ff4444; width: 90%; max-width: 400px; }
+        .spec-btn { background: #333; color: #fff; border: 2px solid #fff; padding: 10px 20px; font-weight: bold; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -193,6 +167,15 @@
         <div style="margin-top:10px;"><span class="hud-label">DISTANCE</span> <br><span id="hud-dist">0</span> / 10000M</div>
         <div style="margin-top:20px;" class="hud-label">NITROUS</div>
         <div id="nitro-container"><div id="nitro-fill"></div></div>
+    </div>
+
+    <div id="spectator-ui" class="hidden">
+        <div style="color:#ff4444; font-size:1.5rem; margin-bottom: 5px;">WRECKED!</div>
+        <div style="font-size:1.2rem; color:#fff; margin-bottom: 15px;">SPECTATING: <span id="spec-name" style="color:#00ffcc;">---</span></div>
+        <div style="display: flex; justify-content: space-between;">
+            <button class="spec-btn" onclick="window.specPrev()">◀ PREV</button>
+            <button class="spec-btn" onclick="window.specNext()">NEXT ▶</button>
+        </div>
     </div>
 
     <div id="mobile-controls" class="hidden">
@@ -220,7 +203,6 @@
 
     <div id="screen-username-gate" class="screen hidden">
         <h2 style="font-size:2.5rem; margin-bottom: 20px;">CLAIM YOUR HANDLE</h2>
-        <p style="margin-bottom:20px; color:#ccc;">This name will represent you in the 10-player hub.</p>
         <input type="text" id="gate-name-input" placeholder="UNIQUE USERNAME" maxlength="12">
         <button class="btn btn-main" onclick="window.claimUsername()">CLAIM HANDLE</button>
         <div id="gate-err" style="color:#ff4444; margin-top:15px; height:20px; font-weight:bold;"></div>
@@ -252,18 +234,20 @@
     <div id="screen-lobby" class="screen hidden">
         <h2 id="lobby-code-display" style="font-size:3.5rem; color:#00ffcc;">ROOM: ---</h2>
         <p id="lobby-status" style="color:#ccc; margin-bottom: 10px;"></p>
-        
         <div id="lobby-grid"></div>
-
         <button id="btn-start-race" class="btn btn-main hidden" onclick="window.hostStartRace()">START ENGINE</button>
         <button class="btn" style="background:#ff4444; color:#fff; margin-top:20px;" onclick="window.leaveLobby()">LEAVE LOBBY</button>
     </div>
 
     <div id="screen-gameover" class="screen hidden">
-        <div id="trophy-container" style="font-size: 6rem; margin-bottom: 10px; text-shadow: 0 0 20px rgba(255,215,0,0.8);">🏆</div>
-        <h1 id="go-title">RACE OVER</h1>
-        <h2 id="go-rank" style="font-size:2.5rem; color:#FFD700; margin-bottom:10px;"></h2>
-        <p id="go-reason" style="font-size:1.5rem; margin-bottom:2rem; color:#ccc;"></p>
+        <div id="trophy-container" style="font-size: 5rem; margin-bottom: 5px; text-shadow: 0 0 20px rgba(255,215,0,0.8);">🏆</div>
+        <h1 id="go-title" style="font-size: 3rem; margin-bottom: 10px;">RACE OVER</h1>
+        <h2 id="go-rank" style="font-size:2rem; color:#FFD700; margin-bottom:5px;"></h2>
+        <p id="go-reason" style="font-size:1.2rem; margin-bottom:15px; color:#ccc;"></p>
+        
+        <div id="leaderboard-container" style="background: rgba(0,0,0,0.8); border: 2px solid #00ffcc; padding: 10px; max-height: 35vh; overflow-y: auto; width: 95%; max-width: 700px; margin-bottom: 20px;">
+            </div>
+
         <button class="btn btn-main" onclick="window.leaveLobby()">RETURN TO HUB</button>
     </div>
 
@@ -290,9 +274,11 @@
     let raceFinished = false; 
     let crossTriggered = false; 
     
-    // Added camZoom for smooth hyper-speed camera interpolation
-    let p1 = { lane: 1, camLane: 1, dist: 0, speed: 0, nitro: 100, turboActive: false, isBraking: false, dead: false, colIdx: 0, camZoom: 0.55 };
+    let p1 = { lane: 1, camLane: 1, dist: 0, speed: 0, nitro: 100, turboActive: false, isBraking: false, dead: false, colIdx: 0, camZoom: 0.55, finishTime: 999999999 };
     let traffic = [], keys = {}, lastTime = 0, netTimer = 0;
+    
+    // Spectator Variables
+    window.spectatingId = null;
 
     const COLORS = [
         { f: "#b02", t: "#d03", s: "#801", b: "#e04" }, 
@@ -364,6 +350,22 @@
     window.onkeydown = e => { keys[e.code] = true; };
     window.onkeyup = e => { keys[e.code] = false; };
 
+    // Spectator Controls
+    window.specNext = () => {
+        let alive = clients.filter(c => !c.dead);
+        if(!alive.length) return;
+        let idx = alive.findIndex(c => c.id === window.spectatingId);
+        idx = (idx + 1) % alive.length;
+        window.spectatingId = alive[idx].id;
+    };
+    window.specPrev = () => {
+        let alive = clients.filter(c => !c.dead);
+        if(!alive.length) return;
+        let idx = alive.findIndex(c => c.id === window.spectatingId);
+        idx = (idx - 1 + alive.length) % alive.length;
+        window.spectatingId = alive[idx].id;
+    };
+
     window.hostRoom = (overrideCode = null) => {
         roomPass = document.getElementById('host-pass').value.trim();
         roomCode = overrideCode || Math.random().toString(36).substring(2,7).toUpperCase();
@@ -384,22 +386,33 @@
                     if (clients.length >= 9) { conn.send({type: 'rejected', msg: 'ROOM FULL'}); setTimeout(()=>conn.close(), 500); return; }
                     if (roomPass && data.pass !== roomPass) { conn.send({type: 'rejected', msg: 'INVALID PASSWORD'}); setTimeout(()=>conn.close(), 500); return; }
                     
-                    clients.push({ conn: conn, id: conn.peer, name: data.name, dist: 0, lane: 1, speed: 0, dead: false, isBraking: false, colIdx: clients.length + 1 });
+                    clients.push({ conn: conn, id: conn.peer, name: data.name, dist: 0, lane: 1, speed: 0, dead: false, isBraking: false, colIdx: clients.length + 1, finishTime: 999999999 });
                     conn.send({type: 'accepted', colIdx: clients.length});
                     broadcastLobbyState();
                 }
                 if (data.type === 'sync' && gameState === 'RACE') {
-                    let c = clients.find(c => c.id === conn.peer);
-                    if (c) { c.dist = data.dist; c.lane = data.lane; c.speed = data.speed; c.dead = data.dead; c.isBraking = data.isBraking; }
+                    let c = clients.find(cl => cl.id === conn.peer);
+                    if (c) { 
+                        c.dist = data.dist; c.lane = data.lane; c.speed = data.speed; c.isBraking = data.isBraking; 
+                        if(data.dead && !c.dead) c.dead = true; // register wreck
+                    }
                 }
+                // Timestamp accuracy check
                 if (data.type === 'crossed_finish_line') {
-                    triggerGlobalFinish(); 
+                    let c = clients.find(cl => cl.id === conn.peer);
+                    if (c && !c.dead && c.dist < TOTAL_DIST) {
+                        c.dist = TOTAL_DIST;
+                        c.finishTime = performance.now(); // Host marks exact time
+                    }
                 }
             });
             conn.on('close', () => {
-                clients = clients.filter(c => c.id !== conn.peer);
-                if (gameState === 'LOBBY') broadcastLobbyState();
-                checkRemainingPlayers();
+                let c = clients.find(cl => cl.id === conn.peer);
+                if(c) c.dead = true; // If someone leaves mid-race, they wreck.
+                if (gameState === 'LOBBY') {
+                    clients = clients.filter(cl => cl.id !== conn.peer);
+                    broadcastLobbyState();
+                }
             });
         });
     };
@@ -407,14 +420,11 @@
     window.joinRoom = () => {
         const joinBtn = document.getElementById('btn-join-room');
         if (joinBtn.disabled) return;
-        joinBtn.disabled = true;
-        joinBtn.innerText = "CONNECTING...";
+        joinBtn.disabled = true; joinBtn.innerText = "CONNECTING...";
 
         roomCode = document.getElementById('join-code').value.toUpperCase();
         roomPass = document.getElementById('join-pass').value;
-        if (!roomCode) {
-            joinBtn.disabled = false; joinBtn.innerText = "CONNECT"; return;
-        }
+        if (!roomCode) { joinBtn.disabled = false; joinBtn.innerText = "CONNECT"; return; }
         
         peer = new Peer();
         peer.on('open', (id) => {
@@ -432,19 +442,15 @@
                 if(data.type === 'kicked') { alert("REMOVED BY CREATOR"); window.leaveLobby(); }
                 if(data.type === 'lobby_state') { clients = data.clients; updateLobbyUI(); }
                 if(data.type === 'start_race') { traffic = data.traffic; startCountdown(); }
-                if(data.type === 'game_sync') { clients = data.clients; traffic = data.traffic; checkRemainingPlayers(); }
-                if(data.type === 'race_over') {
-                    let myRank = data.rankings.findIndex(r => r.id === myPeerId) + 1;
-                    endGame("RACE CONCLUDED!", true, myRank, data.rankings.length);
-                }
+                if(data.type === 'game_sync') { clients = data.clients; traffic = data.traffic; }
+                if(data.type === 'race_over') { showFinalResults(data.rankings, data.reason); }
             });
             
             hostConnToLobby.on('close', () => {
-                if(gameState === 'RACE') endGame("HOST DISCONNECTED", true, 0, 0);
+                if(gameState === 'RACE') showFinalResults([], "HOST DISCONNECTED");
                 else { alert("LOBBY CLOSED"); window.leaveLobby(); }
             });
         });
-
         peer.on('error', () => { joinBtn.disabled = false; joinBtn.innerText = "CONNECT"; });
     };
 
@@ -463,9 +469,7 @@
     };
 
     function updateLobbyUI() {
-        const grid = document.getElementById('lobby-grid');
-        grid.innerHTML = "";
-        
+        const grid = document.getElementById('lobby-grid'); grid.innerHTML = "";
         grid.innerHTML += `<div class="lobby-slot"><span class="slot-creator">1. ${isHost ? window.playerName : "CREATOR"} (CREATOR)</span></div>`;
         
         let displayList = isHost ? clients : clients;
@@ -480,11 +484,8 @@
         }
 
         const startBtn = document.getElementById('btn-start-race');
-        if (isHost && clients.length > 0) {
-            startBtn.classList.remove('hidden');
-        } else {
-            startBtn.classList.add('hidden');
-        }
+        if (isHost && clients.length > 0) startBtn.classList.remove('hidden');
+        else startBtn.classList.add('hidden');
     }
 
     window.hostStartRace = () => {
@@ -493,27 +494,20 @@
         let types = ['speedster', 'commuter', 'tank'];
         let lastZ = [0, 0, 0]; 
 
-        // Generate traffic out to 12,000m to cover high speeds and increased draw distance
         for (let d = 800; d < 12000; d += 250) {
             let safeLane = Math.floor(d / 500) % 3; 
             for (let lane = 0; lane < 3; lane++) {
                 if (lane === safeLane) continue; 
-                
                 if (Math.random() < 0.4) {
                     if (d - lastZ[lane] > 300) { 
                         let type = types[Math.floor(Math.random()*types.length)];
                         let baseSpeed = type === 'speedster' ? 120 + Math.random()*20 : (type === 'tank' ? 50 + Math.random()*10 : 80 + Math.random()*20);
-                        
-                        traffic.push({ 
-                            d: d, l: lane, s: baseSpeed, type: type, 
-                            col: COLORS[Math.floor(Math.random() * COLORS.length)] 
-                        });
+                        traffic.push({ d: d, l: lane, s: baseSpeed, type: type, col: COLORS[Math.floor(Math.random() * COLORS.length)] });
                         lastZ[lane] = d;
                     }
                 }
             }
         }
-        
         clients.forEach(c => c.conn.send({ type: 'start_race', traffic: traffic }));
         startCountdown();
     };
@@ -522,12 +516,14 @@
         window.showScreen(null); gameState = 'COUNTDOWN';
         const ui = document.getElementById('countdown-ui'); ui.classList.remove('hidden');
         if(isTouchDevice) document.getElementById('mobile-controls').classList.remove('hidden');
-
-        p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; raceFinished = false; crossTriggered = false; p1.camZoom = 0.55;
+        
+        document.getElementById('spectator-ui').classList.add('hidden');
+        window.spectatingId = null;
+        p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; raceFinished = false; crossTriggered = false; p1.camZoom = 0.55; p1.finishTime = 999999999;
+        
         let count = 3; ui.innerText = count;
         let t = setInterval(() => { 
-            count--; 
-            ui.innerText = count > 0 ? count : "GO!"; 
+            count--; ui.innerText = count > 0 ? count : "GO!"; 
             if(count < 0) { 
                 clearInterval(t); ui.classList.add('hidden'); 
                 document.getElementById('hud').classList.remove('hidden');
@@ -536,136 +532,157 @@
         }, 1000);
     }
 
-    function triggerGlobalFinish() {
+    // Host checking logic for Sole Survivor and All Finished
+    function checkRaceState() {
+        if(gameState !== 'RACE' || raceFinished) return;
+        
+        let aliveClients = clients.filter(c => !c.dead);
+        let myAlive = !p1.dead;
+        let totalAlive = aliveClients.length + (myAlive ? 1 : 0);
+        
+        let finishedClients = clients.filter(c => c.dist >= TOTAL_DIST);
+        let totalFinished = finishedClients.length + (p1.dist >= TOTAL_DIST ? 1 : 0);
+        let totalPlayers = clients.length + 1;
+
+        if (totalAlive === 0) {
+            triggerGlobalFinish("ALL RACERS WRECKED!");
+        } else if (totalPlayers >= 2 && totalAlive === 1 && totalFinished === 0) {
+            // ID-10: Sole Survivor Win Logic
+            if (myAlive) p1.dist = TOTAL_DIST;
+            else aliveClients[0].dist = TOTAL_DIST;
+            triggerGlobalFinish("SOLE SURVIVOR! ALL OTHERS WRECKED.");
+        } else if (totalAlive === totalFinished && totalAlive > 0) {
+            triggerGlobalFinish("ALL SURVIVORS CROSSED THE LINE!");
+        }
+    }
+
+    function triggerGlobalFinish(reasonStr = "RACE CONCLUDED") {
         if (raceFinished) return;
         raceFinished = true;
         
-        let allRacers = clients.map(c => ({id: c.id, name: c.name, dist: c.dist}));
-        allRacers.push({id: myPeerId, name: window.playerName, dist: p1.dist});
-        allRacers.sort((a, b) => b.dist - a.dist); 
+        // Compile Leaderboard Array
+        let allRacers = clients.map(c => ({id: c.id, name: c.name, dist: c.dist, dead: c.dead, finishTime: c.finishTime || 999999999}));
+        allRacers.push({id: myPeerId, name: window.playerName, dist: p1.dist, dead: p1.dead, finishTime: p1.finishTime || 999999999});
         
-        clients.forEach(c => c.conn.send({ type: 'race_over', rankings: allRacers }));
+        // Sorting Logic: Finished (by time) > Wrecked (by distance)
+        allRacers.sort((a, b) => {
+            if (!a.dead && !b.dead) return a.finishTime - b.finishTime; 
+            if (!a.dead && b.dead) return -1; 
+            if (a.dead && !b.dead) return 1;
+            return b.dist - a.dist; 
+        });
         
-        let myRank = allRacers.findIndex(r => r.id === myPeerId) + 1;
-        endGame("RACE CONCLUDED!", true, myRank, allRacers.length);
+        clients.forEach(c => c.conn.send({ type: 'race_over', rankings: allRacers, reason: reasonStr }));
+        showFinalResults(allRacers, reasonStr);
     }
 
     function updateProgressBar() {
-        if (gameState !== 'RACE' && gameState !== 'COUNTDOWN') {
-            document.getElementById('progress-bar').classList.add('hidden');
-            return;
-        }
-        let pb = document.getElementById('progress-bar');
-        pb.classList.remove('hidden');
-        pb.innerHTML = '';
-        
+        if (gameState !== 'RACE' && gameState !== 'COUNTDOWN') { document.getElementById('progress-bar').classList.add('hidden'); return; }
+        let pb = document.getElementById('progress-bar'); pb.classList.remove('hidden'); pb.innerHTML = '';
         clients.forEach(c => {
             let pct = Math.max(0, Math.min(100, (c.dist / TOTAL_DIST) * 100));
             pb.innerHTML += `<div class="prog-pip" style="left: calc(${pct}% - 10px); background: ${COLORS[c.colIdx % COLORS.length].f}; z-index: 51;"></div>`;
         });
-        
         let myPct = Math.max(0, Math.min(100, (p1.dist / TOTAL_DIST) * 100));
         pb.innerHTML += `<div class="prog-pip" style="left: calc(${myPct}% - 10px); background: ${COLORS[p1.colIdx % COLORS.length].f}; z-index: 52; border-color: #00ffcc;"></div>`;
     }
 
-    // High-Speed Physics Update
-    function update(dt) {
-        let steerSpeed = 4.5; 
-        if(keys['KeyA'] || keys['ArrowLeft']) p1.lane -= steerSpeed * dt;
-        if(keys['KeyD'] || keys['ArrowRight']) p1.lane += steerSpeed * dt;
-        p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); 
-        p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
-
-        p1.isBraking = keys['KeyS'] || keys['ArrowDown'];
-        let gasPressed = keys['KeyW'] || keys['ArrowUp'];
+    // Handles the local wreck sequence
+    function localWreck() {
+        p1.dead = true;
+        document.getElementById('mobile-controls').classList.add('hidden');
+        document.getElementById('spectator-ui').classList.remove('hidden');
+        if(!isHost) hostConnToLobby.send({type: 'sync', dist: p1.dist, lane: p1.lane, speed: 0, dead: true, isBraking: false});
         
-        // 2X Speed & Nitro Logic Buffs
-        if (p1.isBraking) {
-            p1.turboActive = false;
-            p1.speed = Math.max(0, p1.speed - 800 * dt); // 2x Braking Power
-        } else {
-            if (keys['ShiftLeft'] && p1.speed > 80 && p1.nitro > 0) {
-                if (!p1.turboActive && p1.nitro > 20) { p1.turboActive = true; } 
-            } else {
-                p1.turboActive = false;
-            }
+        // Assign first alive target to spectate
+        let alive = clients.filter(c => !c.dead);
+        if(alive.length > 0) window.spectatingId = alive[0].id;
+    }
 
-            if (p1.turboActive) {
-                p1.nitro -= 16.5 * dt; // 2x Duration (slower burn)
-                if (p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; }
-            } else {
-                if (p1.nitro < 100) p1.nitro += 15 * dt;
-            }
+    function update(dt) {
+        if (!p1.dead) {
+            let steerSpeed = 4.5; 
+            if(keys['KeyA'] || keys['ArrowLeft']) p1.lane -= steerSpeed * dt;
+            if(keys['KeyD'] || keys['ArrowRight']) p1.lane += steerSpeed * dt;
+            p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); 
+            p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
 
-            if (gasPressed) {
-                let targetSpeed = p1.turboActive ? 640 : 360; // 2x Target Speeds
-                p1.speed = Math.min(targetSpeed, p1.speed + 300 * dt); // 2x Thrust
-            } else {
-                p1.speed = Math.max(0, p1.speed - 80 * dt); // Coasting friction
-            }
-        }
-
-        p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
-
-        let nitroFill = document.getElementById('nitro-fill');
-        nitroFill.style.width = p1.nitro + "%";
-        if (!p1.turboActive && p1.nitro < 20) {
-            nitroFill.style.background = "linear-gradient(90deg, #ff0055, #ff4444)";
-        } else {
-            nitroFill.style.background = "linear-gradient(90deg, #00f0ff, #00ffcc)";
-        }
-
-        traffic.forEach(t => {
-            if(isHost) {
-                t.d += ((t.s * 0.277 * 4.0) * dt); 
-                let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250);
-                if (carAhead && t.s > carAhead.s) { t.s = Math.max(0, t.s - 100 * dt); } 
-            }
-            let lBound = V_DIMS[t.type].lB;
+            p1.isBraking = keys['KeyS'] || keys['ArrowDown'];
+            let gasPressed = keys['KeyW'] || keys['ArrowUp'];
             
-            // Speed-Padded Collision Check to prevent jumping through cars
-            let hitZ = (lBound * 0.6) + (p1.speed * dt * 0.2); 
-            if(Math.abs(p1.dist - t.d) < hitZ && Math.abs(p1.lane - t.l) < 0.40 && !p1.dead) {
-                p1.dead = true;
-                if(!isHost) hostConnToLobby.send({type: 'sync', dist: p1.dist, lane: p1.lane, speed: 0, dead: true, isBraking: false});
-                endGame("WRECKED!", false, 0, 0);
-            }
-        });
-
-        if(p1.dist >= TOTAL_DIST && !p1.dead && !crossTriggered) {
-            crossTriggered = true;
-            p1.speed = 0; 
-            p1.dist = TOTAL_DIST;
-            if (isHost) {
-                triggerGlobalFinish();
+            if (p1.isBraking) {
+                p1.turboActive = false; p1.speed = Math.max(0, p1.speed - 800 * dt);
             } else {
-                hostConnToLobby.send({type: 'crossed_finish_line'});
-                endGame("CROSSED THE LINE! WAITING FOR OTHERS...", true, 1, 1); 
+                if (keys['ShiftLeft'] && p1.speed > 80 && p1.nitro > 0) {
+                    if (!p1.turboActive && p1.nitro > 20) { p1.turboActive = true; } 
+                } else { p1.turboActive = false; }
+
+                if (p1.turboActive) {
+                    p1.nitro -= 16.5 * dt; 
+                    if (p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; }
+                } else { if (p1.nitro < 100) p1.nitro += 15 * dt; }
+
+                if (gasPressed) {
+                    let targetSpeed = p1.turboActive ? 640 : 360;
+                    p1.speed = Math.min(targetSpeed, p1.speed + 300 * dt); 
+                } else { p1.speed = Math.max(0, p1.speed - 80 * dt); }
             }
+
+            p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
+
+            traffic.forEach(t => {
+                if(isHost) {
+                    t.d += ((t.s * 0.277 * 4.0) * dt); 
+                    let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250);
+                    if (carAhead && t.s > carAhead.s) { t.s = Math.max(0, t.s - 100 * dt); } 
+                }
+                let lBound = V_DIMS[t.type].lB;
+                let hitZ = (lBound * 0.6) + (p1.speed * dt * 0.2); 
+                if(Math.abs(p1.dist - t.d) < hitZ && Math.abs(p1.lane - t.l) < 0.40 && !p1.dead) {
+                    localWreck();
+                }
+            });
+
+            if(p1.dist >= TOTAL_DIST && !p1.dead && !crossTriggered) {
+                crossTriggered = true; p1.speed = 0; p1.dist = TOTAL_DIST; p1.finishTime = performance.now();
+                if (isHost) { triggerGlobalFinish(); } 
+                else { hostConnToLobby.send({type: 'crossed_finish_line'}); }
+                
+                document.getElementById('mobile-controls').classList.add('hidden');
+                document.getElementById('hud-speed').innerText = "FINISH";
+            }
+        } else {
+            // Spectator Camera Lerp Logic
+            let target = clients.find(c => c.id === window.spectatingId);
+            if (target && !target.dead) {
+                p1.camLane += (target.lane - p1.camLane) * 8 * dt;
+                p1.camZoom += (0.55 - p1.camZoom) * 4 * dt; 
+            } else { window.specNext(); }
         }
+
+        // HUD Updates
+        let nitroFill = document.getElementById('nitro-fill'); nitroFill.style.width = p1.nitro + "%";
+        if (!p1.turboActive && p1.nitro < 20) { nitroFill.style.background = "linear-gradient(90deg, #ff0055, #ff4444)"; } 
+        else { nitroFill.style.background = "linear-gradient(90deg, #00f0ff, #00ffcc)"; }
+
+        if(!p1.dead && !crossTriggered) {
+            document.getElementById('hud-speed').innerText = Math.floor(p1.speed);
+            document.getElementById('hud-dist').innerText = Math.floor(p1.dist);
+        }
+
+        updateProgressBar();
 
         netTimer += dt;
         if(netTimer > 0.05) {
             if(isHost) {
-                let safeClients = clients.map(c => ({ id: c.id, name: c.name, dist: c.dist, lane: c.lane, speed: c.speed, dead: c.dead, isBraking: c.isBraking, colIdx: c.colIdx }));
-                safeClients.push({ id: myPeerId, name: window.playerName, dist: p1.dist, lane: p1.lane, speed: p1.speed, dead: p1.dead, isBraking: p1.isBraking, colIdx: p1.colIdx }); 
+                let safeClients = clients.map(c => ({ id: c.id, name: c.name, dist: c.dist, lane: c.lane, speed: c.speed, dead: c.dead, isBraking: c.isBraking, colIdx: c.colIdx, finishTime: c.finishTime }));
+                safeClients.push({ id: myPeerId, name: window.playerName, dist: p1.dist, lane: p1.lane, speed: p1.speed, dead: p1.dead, isBraking: p1.isBraking, colIdx: p1.colIdx, finishTime: p1.finishTime }); 
                 clients.forEach(c => c.conn.send({type: 'game_sync', clients: safeClients, traffic: traffic}));
+                checkRaceState(); // Host dictates global finish rules
             } else {
                 hostConnToLobby.send({type: 'sync', dist: p1.dist, lane: p1.lane, speed: p1.speed, dead: p1.dead, isBraking: p1.isBraking});
             }
             netTimer = 0;
-        }
-
-        document.getElementById('hud-speed').innerText = Math.floor(p1.speed);
-        document.getElementById('hud-dist').innerText = Math.floor(p1.dist);
-        updateProgressBar();
-    }
-
-    function checkRemainingPlayers() {
-        if(gameState !== 'RACE' || raceFinished) return;
-        let aliveOthers = clients.filter(c => c.id !== myPeerId && !c.dead);
-        if(aliveOthers.length === 0 && clients.length > 0) {
-            triggerGlobalFinish();
         }
     }
 
@@ -677,41 +694,51 @@
         let skyGrad = ctx.createLinearGradient(0, 0, 0, horizon);
         skyGrad.addColorStop(0, "#0a0a2a"); skyGrad.addColorStop(1, "#3a1c71"); 
         ctx.fillStyle = skyGrad; ctx.fillRect(0,0,w,h);
-        
         ctx.fillStyle = "#111"; ctx.fillRect(0, horizon, w, h-horizon); 
 
-        // Smooth Camera Interpolation for Hyper-Speed
-        let targetZoom = p1.turboActive ? 0.35 : 0.55;
-        p1.camZoom += (targetZoom - p1.camZoom) * 4 * (0.016); // fixed timestep for smooth lerp
-        let focalLength = h * p1.camZoom; 
+        // Establish View State (Self or Spectating)
+        let viewState = { dist: p1.dist, camLane: p1.camLane, camZoom: p1.camZoom, speed: p1.speed, turbo: p1.turboActive };
+        if (p1.dead && window.spectatingId) {
+            let target = clients.find(c => c.id === window.spectatingId);
+            if (target) {
+                viewState.dist = target.dist; viewState.speed = target.speed; viewState.turbo = target.speed > 400;
+                document.getElementById('spec-name').innerText = target.name;
+                document.getElementById('hud-speed').innerText = Math.floor(target.speed);
+                document.getElementById('hud-dist').innerText = Math.floor(target.dist);
+            }
+        } else if (p1.dead) {
+            document.getElementById('spec-name').innerText = "NO SURVIVORS";
+        }
+
+        if (!p1.dead) {
+            let targetZoom = p1.turboActive ? 0.35 : 0.55;
+            p1.camZoom += (targetZoom - p1.camZoom) * 4 * (0.016); 
+            viewState.camZoom = p1.camZoom;
+        }
+        
+        let focalLength = h * viewState.camZoom; 
 
         function project(worldX, worldY, worldZ) {
-            let dz = worldZ - p1.dist;
+            let dz = worldZ - viewState.dist;
             if(dz < -50) return null; 
             let scale = focalLength / (dz + 180); 
-            let camX = (p1.camLane - 1) * 150; 
+            let camX = (viewState.camLane - 1) * 150; 
             return { x: w/2 + (worldX - camX)*scale, y: horizon + (worldY + 120)*scale, s: scale };
         }
 
-        // Expanded Draw Distance for high speeds (3500m)
-        let r1 = project(-300, 0, p1.dist - 50); let r2 = project(300, 0, p1.dist - 50);
-        let r3 = project(300, 0, p1.dist + 3500); let r4 = project(-300, 0, p1.dist + 3500);
+        let r1 = project(-300, 0, viewState.dist - 50); let r2 = project(300, 0, viewState.dist - 50);
+        let r3 = project(300, 0, viewState.dist + 3500); let r4 = project(-300, 0, viewState.dist + 3500);
         if(r1 && r3) {
             ctx.fillStyle = "#222"; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.lineTo(r4.x, horizon); ctx.fill();
             ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r4.x, horizon); ctx.stroke(); ctx.beginPath(); ctx.moveTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.stroke();
         }
 
-        let totalCycle = 40; 
-        ctx.fillStyle = "#fff";
-        for(let z = Math.floor(p1.dist/totalCycle)*totalCycle; z < p1.dist + 3500; z += totalCycle) {
+        let totalCycle = 40; ctx.fillStyle = "#fff";
+        for(let z = Math.floor(viewState.dist/totalCycle)*totalCycle; z < viewState.dist + 3500; z += totalCycle) {
             let pL1 = project(-100, 0, z); let pL2 = project(-100, 0, z + 20);
             let pR1 = project(100, 0, z); let pR2 = project(100, 0, z + 20);
-            if (pL1 && pL2 && pL1.y > horizon) {
-                ctx.beginPath(); ctx.moveTo(pL1.x - 2*pL1.s, pL1.y); ctx.lineTo(pL1.x + 2*pL1.s, pL1.y); ctx.lineTo(pL2.x + 2*pL2.s, pL2.y); ctx.lineTo(pL2.x - 2*pL2.s, pL2.y); ctx.fill();
-            }
-            if (pR1 && pR2 && pR1.y > horizon) {
-                ctx.beginPath(); ctx.moveTo(pR1.x - 2*pR1.s, pR1.y); ctx.lineTo(pR1.x + 2*pR1.s, pR1.y); ctx.lineTo(pR2.x + 2*pR2.s, pR2.y); ctx.lineTo(pR2.x - 2*pR2.s, pR2.y); ctx.fill();
-            }
+            if (pL1 && pL2 && pL1.y > horizon) { ctx.beginPath(); ctx.moveTo(pL1.x - 2*pL1.s, pL1.y); ctx.lineTo(pL1.x + 2*pL1.s, pL1.y); ctx.lineTo(pL2.x + 2*pL2.s, pL2.y); ctx.lineTo(pL2.x - 2*pL2.s, pL2.y); ctx.fill(); }
+            if (pR1 && pR2 && pR1.y > horizon) { ctx.beginPath(); ctx.moveTo(pR1.x - 2*pR1.s, pR1.y); ctx.lineTo(pR1.x + 2*pR1.s, pR1.y); ctx.lineTo(pR2.x + 2*pR2.s, pR2.y); ctx.lineTo(pR2.x - 2*pR2.s, pR2.y); ctx.fill(); }
         }
 
         function draw3DBox(worldX, worldZ, wSize, hSize, lSize, c, yOff) {
@@ -724,41 +751,36 @@
             ctx.fillStyle = c.f; ctx.beginPath(); ctx.moveTo(fTL.x, fTL.y); ctx.lineTo(fTR.x, fTR.y); ctx.lineTo(fBR.x, fBR.y); ctx.lineTo(fBL.x, fBL.y); ctx.fill();
             ctx.fillStyle = c.t; ctx.beginPath(); ctx.moveTo(fTL.x, fTL.y); ctx.lineTo(fTR.x, fTR.y); ctx.lineTo(bTR.x, bTR.y); ctx.lineTo(bTL.x, bTL.y); ctx.fill();
             
-            let camX = (p1.camLane - 1) * 150;
-            ctx.fillStyle = c.s;
-            if (worldX > camX) { 
-                ctx.beginPath(); ctx.moveTo(fTL.x, fTL.y); ctx.lineTo(fBL.x, fBL.y); ctx.lineTo(bBL.x, bBL.y); ctx.lineTo(bTL.x, bTL.y); ctx.fill();
-            } else { 
-                ctx.beginPath(); ctx.moveTo(fTR.x, fTR.y); ctx.lineTo(fBR.x, fBR.y); ctx.lineTo(bBR.x, bBR.y); ctx.lineTo(bTR.x, bTR.y); ctx.fill();
-            }
+            let camX = (viewState.camLane - 1) * 150; ctx.fillStyle = c.s;
+            if (worldX > camX) { ctx.beginPath(); ctx.moveTo(fTL.x, fTL.y); ctx.lineTo(fBL.x, fBL.y); ctx.lineTo(bBL.x, bBL.y); ctx.lineTo(bTL.x, bTL.y); ctx.fill(); } 
+            else { ctx.beginPath(); ctx.moveTo(fTR.x, fTR.y); ctx.lineTo(fBR.x, fBR.y); ctx.lineTo(bBR.x, bBR.y); ctx.lineTo(bTR.x, bTR.y); ctx.fill(); }
             ctx.fillStyle = c.b; ctx.beginPath(); ctx.moveTo(bTL.x, bTL.y); ctx.lineTo(bTR.x, bTR.y); ctx.lineTo(bBR.x, bBR.y); ctx.lineTo(bBL.x, bBL.y); ctx.fill();
-
             return { bTL, bTR, bBL, bBR }; 
         }
 
-        let q = traffic.filter(t => t.d > p1.dist - 100 && t.d < p1.dist + 3500).map(t => ({...t, isOpp: false}));
+        let q = traffic.filter(t => t.d > viewState.dist - 100 && t.d < viewState.dist + 3500).map(t => ({...t, isOpp: false}));
         
         clients.forEach(c => {
-            if(c.id !== myPeerId && !c.dead && c.dist > p1.dist - 100 && c.dist < p1.dist + 3500) {
-                q.push({d: c.dist, l: c.lane, type: 'player', col: COLORS[c.colIdx % COLORS.length], isOpp: true, name: c.name, brake: c.isBraking});
+            if(!c.dead && c.dist > viewState.dist - 100 && c.dist < viewState.dist + 3500) {
+                // Don't render the person we are spectating (since we are in their camera)
+                if (c.id !== window.spectatingId) {
+                    q.push({d: c.dist, l: c.lane, type: 'player', col: COLORS[c.colIdx % COLORS.length], isOpp: true, name: c.name, brake: c.isBraking});
+                }
             }
         });
         
+        // Render ourselves if we are alive
         if(!p1.dead) q.push({d: p1.dist, l: p1.lane, type: 'player', col: COLORS[p1.colIdx % COLORS.length], isOpp: false, isMe: true, brake: p1.isBraking}); 
         
         q.sort((a,b) => (b.d - a.d) || (b.l - a.l)).forEach(obj => {
-            let worldX = (obj.l - 1) * 150;
-            let dims = V_DIMS[obj.type];
+            let worldX = (obj.l - 1) * 150; let dims = V_DIMS[obj.type];
             let backFace = draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0);
             draw3DBox(worldX, obj.d + dims.zOff, dims.w * 0.8, dims.hC, dims.lC, {f: "#111", t: "#222", s: "#0a0a0a", b: "#151515"}, dims.hB);
 
             if (backFace) {
                 let tw = backFace.bTR.x - backFace.bTL.x, th = backFace.bBL.y - backFace.bTL.y;
-                let isBraking = obj.brake;
-                let glow = isBraking ? 20 : 5;
-                ctx.shadowBlur = glow; ctx.shadowColor = "red";
-                ctx.fillStyle = isBraking ? "#ff0000" : "#aa0000";
-                
+                let isBraking = obj.brake; let glow = isBraking ? 20 : 5;
+                ctx.shadowBlur = glow; ctx.shadowColor = "red"; ctx.fillStyle = isBraking ? "#ff0000" : "#aa0000";
                 ctx.beginPath(); ctx.arc(backFace.bTL.x + tw*0.2, backFace.bTL.y + th*0.5, tw*(isBraking?0.18:0.12), 0, Math.PI*2); ctx.fill();
                 ctx.beginPath(); ctx.arc(backFace.bTR.x - tw*0.2, backFace.bTL.y + th*0.5, tw*(isBraking?0.18:0.12), 0, Math.PI*2); ctx.fill();
                 ctx.shadowBlur = 0;
@@ -767,29 +789,20 @@
             if (obj.isOpp && backFace) {
                 let tagP = project(worldX, -(dims.hC + dims.hB + 50), obj.d);
                 if (tagP && tagP.y > horizon) {
-                    ctx.fillStyle = "#fff";
-                    ctx.font = Math.max(12 * tagP.s, 8) + "px 'Arial Black'";
-                    ctx.textAlign = "center";
-                    ctx.fillText(obj.name, tagP.x, tagP.y - (10*tagP.s));
-                    ctx.fillStyle = "#00ffcc";
-                    ctx.fillText("▼", tagP.x, tagP.y);
+                    ctx.fillStyle = "#fff"; ctx.font = Math.max(12 * tagP.s, 8) + "px 'Arial Black'"; ctx.textAlign = "center";
+                    ctx.fillText(obj.name, tagP.x, tagP.y - (10*tagP.s)); ctx.fillStyle = "#00ffcc"; ctx.fillText("▼", tagP.x, tagP.y);
                 }
             }
         });
 
-        // Expanded speed lines for 640 KM/H
-        if(p1.speed > 250) {
-            ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = p1.turboActive ? 3 : 1;
+        if(viewState.speed > 250) {
+            ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = viewState.turbo ? 3 : 1;
             let cx = w/2, cy = horizon;
-            for(let i=0; i < (p1.turboActive ? 40 : 20); i++) {
-                let angle = Math.random() * Math.PI * 2;
-                let dist = 60 + Math.random() * (h/2); 
-                let length = (p1.speed/3) + Math.random()*100;
-                let sx = cx + Math.cos(angle)*dist;
-                let sy = cy + Math.sin(angle)*dist;
-                ctx.beginPath(); ctx.moveTo(sx, sy); 
-                ctx.lineTo(sx + Math.cos(angle)*length, sy + Math.sin(angle)*length); 
-                ctx.stroke();
+            for(let i=0; i < (viewState.turbo ? 40 : 20); i++) {
+                let angle = Math.random() * Math.PI * 2; let dist = 60 + Math.random() * (h/2); 
+                let length = (viewState.speed/3) + Math.random()*100;
+                let sx = cx + Math.cos(angle)*dist; let sy = cy + Math.sin(angle)*dist;
+                ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(angle)*length, sy + Math.sin(angle)*length); ctx.stroke();
             }
         }
         ctx.restore();
@@ -797,9 +810,7 @@
 
     function loop(t) { 
         let dt = (t - lastTime) / 1000; 
-        if(!lastTime) dt = 0; 
-        lastTime = t; 
-        if (dt > 0.1) dt = 0.016;
+        if(!lastTime) dt = 0; lastTime = t; if (dt > 0.1) dt = 0.016;
 
         if(gameState === 'RACE') { update(dt); }
         if(gameState !== 'AUTH' && gameState !== 'MENU') { draw(); }
@@ -808,88 +819,77 @@
     requestAnimationFrame(loop);
 
     function fireConfetti() {
-        let duration = 3000;
-        let end = Date.now() + duration;
+        let duration = 3000; let end = Date.now() + duration;
         (function frame() {
-            let drop = document.createElement('div');
-            drop.innerText = "🎉";
-            drop.style.position = 'fixed';
-            drop.style.left = Math.random() * 100 + 'vw';
-            drop.style.top = '-10px';
-            drop.style.fontSize = (Math.random() * 20 + 10) + 'px';
-            drop.style.zIndex = '200';
-            drop.style.transition = 'top 2s linear, transform 2s ease-in-out';
+            let drop = document.createElement('div'); drop.innerText = "🎉";
+            drop.style.position = 'fixed'; drop.style.left = Math.random() * 100 + 'vw'; drop.style.top = '-10px'; drop.style.fontSize = (Math.random() * 20 + 10) + 'px'; drop.style.zIndex = '200'; drop.style.transition = 'top 2s linear, transform 2s ease-in-out';
             document.body.appendChild(drop);
-            
-            setTimeout(() => { 
-                drop.style.top = '100vh'; 
-                drop.style.transform = `rotate(${Math.random()*360}deg)`; 
-            }, 50);
+            setTimeout(() => { drop.style.top = '100vh'; drop.style.transform = `rotate(${Math.random()*360}deg)`; }, 50);
             setTimeout(() => drop.remove(), 2000);
-
             if (Date.now() < end) requestAnimationFrame(frame);
         }());
     }
 
-    window.endGame = function(msg, win, rank = 0, totalPlayers = 0) {
+    // Grand Leaderboard Render
+    function showFinalResults(allRacers, reasonStr) {
         if(gameState === 'END') return;
         gameState = 'END';
         window.showScreen('screen-gameover');
+        
         document.getElementById('mobile-controls').classList.add('hidden');
         document.getElementById('hud').classList.add('hidden'); 
         document.getElementById('progress-bar').classList.add('hidden');
+        document.getElementById('spectator-ui').classList.add('hidden');
         
-        const title = document.getElementById('go-title');
-        const rankText = document.getElementById('go-rank');
-        const trophy = document.getElementById('trophy-container');
-        
-        document.getElementById('go-reason').innerText = msg;
-        rankText.innerText = "";
-        trophy.innerText = "";
-
-        if (!win) {
-            title.innerText = "YOU WRECKED!"; 
-            title.style.color = "#ff4444";
-            rankText.innerText = "DNF (DID NOT FINISH)";
-            trophy.innerText = "💥";
-            trophy.style.textShadow = "0 0 20px rgba(255,0,0,0.8)";
-        } else if (rank > 0) {
-            title.innerText = "FINISH!";
-            title.style.color = "#00ffcc";
-            
-            let suffix = "TH";
-            if (rank === 1) suffix = "ST";
-            else if (rank === 2) suffix = "ND";
-            else if (rank === 3) suffix = "RD";
-            
-            rankText.innerText = `${rank}${suffix} PLACE`;
-
-            if (rank === totalPlayers && totalPlayers > 1) {
-                title.innerText = "DEAD LAST.";
-                title.style.color = "#555";
-                rankText.style.color = "#888";
-                trophy.innerText = "🐢";
-                trophy.style.textShadow = "none";
-            } else if (rank <= 3) {
-                trophy.innerText = "🏆";
-                trophy.style.textShadow = "0 0 20px rgba(255,215,0,0.8)";
-                fireConfetti();
-            } else {
-                trophy.innerText = "👍";
-                trophy.style.textShadow = "none";
-            }
+        if (!allRacers || allRacers.length === 0) {
+            document.getElementById('go-reason').innerText = reasonStr;
+            return;
         }
-    };
+
+        let myData = allRacers.find(r => r.id === myPeerId);
+        let myRank = allRacers.findIndex(r => r.id === myPeerId) + 1;
+        const title = document.getElementById('go-title');
+        const trophy = document.getElementById('trophy-container');
+
+        if (myData && myData.dead) {
+            title.innerText = "YOU WRECKED!"; title.style.color = "#ff4444";
+            trophy.innerText = "💥"; trophy.style.textShadow = "0 0 20px rgba(255,0,0,0.8)";
+        } else {
+            title.innerText = "FINISH!"; title.style.color = "#00ffcc";
+            if (myRank <= 3) { trophy.innerText = "🏆"; trophy.style.textShadow = "0 0 20px rgba(255,215,0,0.8)"; fireConfetti(); } 
+            else { trophy.innerText = "👍"; trophy.style.textShadow = "none"; }
+        }
+
+        document.getElementById('go-reason').innerText = reasonStr || "RACE CONCLUDED";
+        document.getElementById('go-rank').innerText = "YOUR RANK: " + myRank + " / " + allRacers.length;
+
+        // Build Table
+        let tableHTML = `<table style="width:100%; text-align:left; border-collapse:collapse; font-size:1.2rem;">`;
+        tableHTML += `<tr style="border-bottom:2px solid #00ffcc; color:#00ffcc;">
+            <th style="padding:10px 5px;">#</th><th>RACER</th><th>DISTANCE</th><th>STATUS</th></tr>`;
+        
+        allRacers.forEach((r, i) => {
+            let status = r.dead ? "WRECKED" : "FINISHED";
+            let color = (r.id === myPeerId) ? "#FFD700" : (r.dead ? "#ff4444" : "#fff");
+            tableHTML += `<tr style="color:${color}; border-bottom:1px solid #444;">
+                <td style="padding:10px 5px;">${i+1}</td>
+                <td>${r.name}</td>
+                <td>${Math.floor(r.dist)}m</td>
+                <td>${status}</td>
+            </tr>`;
+        });
+        tableHTML += `</table>`;
+        document.getElementById('leaderboard-container').innerHTML = tableHTML;
+    }
 
     window.leaveLobby = () => {
         if(hostConnToLobby) { try{ hostConnToLobby.close(); } catch(e) {} hostConnToLobby = null; }
         if(peer) { try{ peer.destroy(); } catch(e) {} peer = null; }
-        clients = []; isHost = false; raceFinished = false; crossTriggered = false;
+        clients = []; isHost = false; raceFinished = false; crossTriggered = false; window.spectatingId = null;
         window.showScreen('screen-menu');
-        gameState = 'MENU';
         document.getElementById('progress-bar').classList.add('hidden');
+        document.getElementById('spectator-ui').classList.add('hidden');
     };
-    
     window.addEventListener('beforeunload', window.leaveLobby);
 </script>
 </body>
