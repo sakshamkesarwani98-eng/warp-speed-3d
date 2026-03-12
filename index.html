@@ -27,6 +27,7 @@
 
         window.playerName = "";
         window.userUID = "";
+        window.needsTimeReset = false;
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -66,13 +67,17 @@
             } catch (e) { errDiv.innerText = e; }
         };
 
-        // Matchmaking: Fill-First Logic
+        // Matchmaking: Iron Funnel Logic with Stagger Delay
         window.isSearchingQuickRace = false;
         window.findQuickRace = async () => {
             if (window.isSearchingQuickRace) return;
             window.isSearchingQuickRace = true;
             const btn = document.querySelector('#screen-menu .btn-main');
             btn.innerText = "SEARCHING..."; btn.disabled = true;
+            
+            // Random delay between 200ms and 800ms to stagger simultaneous clicks and fix the dual-lobby glitch
+            await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 600));
+
             try {
                 const publicRef = doc(db, "matchmaking", "LATEST_PUBLIC");
                 let targetCode = null; let isCreating = false;
@@ -89,7 +94,7 @@
                     }
                 });
                 if (isCreating) window.hostRoom(targetCode, false);
-                else { document.getElementById('join-code').value = targetCode; window.joinRoom(targetCode, false, true); }
+                else { document.getElementById('join-code-input').value = targetCode; window.joinRoom(targetCode, false, true); }
             } catch (e) { console.error(e); } finally { btn.innerText = "⚡ QUICK RACE"; btn.disabled = false; window.isSearchingQuickRace = false; }
         };
 
@@ -257,20 +262,13 @@
     window.specNext = () => { let alive = clients.filter(c => !c.dead); if(!alive.length) return; let idx = alive.findIndex(c => c.id === window.spectatingId); window.spectatingId = alive[(idx + 1) % alive.length].id; };
     window.specPrev = () => { let alive = clients.filter(c => !c.dead); if(!alive.length) return; let idx = alive.findIndex(c => c.id === window.spectatingId); window.spectatingId = alive[(idx - 1 + alive.length) % alive.length].id; };
 
-    // Dual-Mode UI Logic
     function applyLobbyUIMode() {
         const btnReady = document.getElementById('btn-toggle-ready');
         const btnHostStart = document.getElementById('btn-host-start');
         const txtWait = document.getElementById('txt-waiting-host');
-        
         btnReady.classList.add('hidden'); btnHostStart.classList.add('hidden'); txtWait.classList.add('hidden');
-        
-        if (isPrivateRoom) {
-            if (isHost) btnHostStart.classList.remove('hidden');
-            else { btnReady.classList.remove('hidden'); txtWait.classList.remove('hidden'); }
-        } else {
-            btnReady.classList.remove('hidden');
-        }
+        if (isPrivateRoom) { if (isHost) btnHostStart.classList.remove('hidden'); else { btnReady.classList.remove('hidden'); txtWait.classList.remove('hidden'); } } 
+        else { btnReady.classList.remove('hidden'); }
     }
 
     window.toggleReady = () => {
@@ -286,11 +284,8 @@
         if (p1.isReady) { btn.style.background = "#ff4444"; btn.innerText = "NOT READY"; } else { btn.style.background = "#00ffcc"; btn.innerText = "READY"; }
     }
 
-    window.forceHostStart = () => {
-        if (isPrivateRoom && isHost) { triggerIgnition(); }
-    }
+    window.forceHostStart = () => { if (isPrivateRoom && isHost) { triggerIgnition(); } }
 
-    // Hosting (Public & Private)
     window.hostRoom = (overrideCode = null, isPrivate = false) => {
         isPrivateRoom = isPrivate;
         roomPass = isPrivate ? document.getElementById('host-pass').value.trim() : "";
@@ -333,7 +328,6 @@
                     if (data.type === 'crossed_finish_line') { if (!c.dead && c.dist < TOTAL_DIST) { c.dist = TOTAL_DIST; c.finishTime = performance.now(); } }
                 }
             });
-            // Instant Pruning Fix
             conn.on('close', () => {
                 let c = clients.find(cl => cl.id === conn.peer);
                 if(c) {
@@ -369,7 +363,7 @@
             hostConnToLobby.on('data', data => {
                 if(data.type === 'rejected') { 
                     alert(data.msg); 
-                    if(isAutoFailover) { window.leaveLobby(); window.hostRoom(roomCode, false); } // Host Migration / Failover Pivot
+                    if(isAutoFailover) { window.leaveLobby(); window.hostRoom(roomCode, false); }
                     else window.leaveLobby(); 
                 }
                 if(data.type === 'accepted') { 
@@ -384,20 +378,15 @@
                 if(data.type === 'race_over') { showFinalResults(data.rankings, data.reason); }
             });
             
-            // Host Migration Trigger
             hostConnToLobby.on('close', () => {
                 if(gameState === 'RACE') showFinalResults([], "LOBBY SERVER DROPPED");
                 else if (gameState === 'LOBBY') {
                     if (!isPrivateRoom && clients.length > 0 && clients[0].id === myPeerId) {
-                        // I am the new Host!
-                        let oldClients = [...clients]; oldClients.shift(); // remove myself
+                        let oldClients = [...clients]; oldClients.shift();
                         window.leaveLobby(); window.hostRoom(roomCode, false);
                     } else if (!isPrivateRoom) {
-                        // Reconnect to new host
                         setTimeout(() => { window.leaveLobby(); window.joinRoom(roomCode, false, true); }, 1500);
-                    } else {
-                        alert("HOST CLOSED PRIVATE LOBBY"); window.leaveLobby();
-                    }
+                    } else { alert("HOST CLOSED PRIVATE LOBBY"); window.leaveLobby(); }
                 }
             });
         });
@@ -415,7 +404,6 @@
         updateLobbyUI(); handleLobbyTimersSync(stateData);
     }
 
-    // Public Democratic Start Math
     function checkPublicStartConditions() {
         if (!isHost || gameState !== 'LOBBY' || ignitionLocked || isPrivateRoom) return;
         let total = clients.length + 1;
@@ -454,7 +442,7 @@
             if(count < 0) { 
                 clearInterval(t); 
                 if (isHost) {
-                    if(isPrivateRoom) { db && runTransaction(db, async(t)=>{ const r=doc(db,"matchmaking","LATEST_PUBLIC"); t.update(r,{status:"LOCKED"});}).catch(()=>{}); }
+                    if(isPrivateRoom) { db && runTransaction(db, async(tr)=>{ const r=doc(db,"matchmaking","LATEST_PUBLIC"); tr.update(r,{status:"LOCKED"});}).catch(()=>{}); }
                     traffic = []; let types = ['speedster', 'commuter', 'tank']; let lastZ = [0, 0, 0]; 
                     for (let d = 800; d < 12000; d += 250) {
                         let safeLane = Math.floor(d / 500) % 3; 
@@ -480,23 +468,23 @@
         document.getElementById('hud').classList.remove('hidden');
         window.spectatingId = null;
         p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; raceFinished = false; crossTriggered = false; p1.camZoom = 0.55; p1.finishTime = 999999999;
-        gameState = 'RACE'; lastTime = performance.now();
+        gameState = 'RACE'; 
+        window.needsTimeReset = true; // Fixes the "Start Stall" glitch
     }
 
     function updateLobbyUI() {
         const grid = document.getElementById('lobby-grid'); grid.innerHTML = "";
         
-        function getStatusSpan(ready, isCreator) {
+        function getStatusSpan(clientObj, isCreator) {
             if (isPrivateRoom && isCreator) return `<span class="status-box status-host">HOST</span>`;
-            if (isPrivateRoom) return ready ? `<span class="status-box status-ready">READY</span>` : `<span class="status-box status-not-ready">WAITING</span>`;
-            return ready ? `<span class="status-box status-ready">READY</span>` : `<span class="status-box status-not-ready">NOT READY</span>`;
+            return clientObj.isReady ? `<span class="status-box status-ready">READY</span>` : `<span class="status-box status-not-ready">NOT READY</span>`;
         }
         
-        grid.innerHTML += `<div class="lobby-slot"><span>1. ${window.playerName}</span> ${getStatusSpan(p1.isReady, isHost)}</div>`;
+        grid.innerHTML += `<div class="lobby-slot"><span>1. ${window.playerName}</span> ${getStatusSpan(p1, isHost)}</div>`;
         for (let i = 0; i < 9; i++) {
             if (i < clients.length) {
                 let c = clients[i];
-                grid.innerHTML += `<div class="lobby-slot"><span>${i+2}. ${c.name}</span> ${getStatusSpan(c.isReady, false)}</div>`;
+                grid.innerHTML += `<div class="lobby-slot"><span>${i+2}. ${c.name}</span> ${getStatusSpan(c, false)}</div>`;
             } else grid.innerHTML += `<div class="lobby-slot" style="color:#666;"><span>${i+2}. [ EMPTY SLOT ]</span> </div>`;
         }
     }
@@ -662,6 +650,7 @@
     }
 
     function loop(t) { 
+        if (window.needsTimeReset) { lastTime = t; window.needsTimeReset = false; }
         let dt = (t - lastTime) / 1000; if(!lastTime) dt = 0; lastTime = t; if (dt > 0.1) dt = 0.016;
         if(gameState === 'RACE') update(dt); if(gameState !== 'AUTH' && gameState !== 'MENU') draw();
         requestAnimationFrame(loop); 
@@ -698,7 +687,6 @@
         tableHTML += `</table>`; document.getElementById('leaderboard-container').innerHTML = tableHTML;
     }
 
-    // Unload hook to force disconnect event instantly to prune array
     window.addEventListener('beforeunload', () => { window.leaveLobby(); });
     window.leaveLobby = () => {
         if(hostPingInterval) clearInterval(hostPingInterval); if(clientPingInterval) clearInterval(clientPingInterval); if(autoStartInterval) clearInterval(autoStartInterval);
