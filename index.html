@@ -27,7 +27,8 @@
 
         window.playerName = "";
         window.userUID = "";
-        window.needsTimeReset = false; // Added to fix the start stall
+        window.lobbyPlayers = []; 
+        window.countdownTimer = null;
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -67,7 +68,6 @@
             } catch (e) { errDiv.innerText = e; }
         };
 
-        // Matchmaking: Iron Funnel Logic with Stagger and Retry
         window.isSearchingQuickRace = false;
         window.findQuickRace = async () => {
             if (window.isSearchingQuickRace) return;
@@ -75,13 +75,9 @@
             const btn = document.querySelector('#screen-menu .btn-main');
             btn.innerText = "SEARCHING..."; btn.disabled = true;
             
-            // Random delay between 200ms and 800ms to stagger simultaneous clicks
-            await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 600));
+            await new Promise(r => setTimeout(r, 300 + Math.random() * 700));
 
-            let attempts = 0;
-            let success = false;
-            let targetCode = null;
-            let isCreating = false;
+            let attempts = 0, success = false, targetCode = null, isCreating = false;
 
             while (attempts < 3 && !success) {
                 try {
@@ -99,21 +95,14 @@
                         }
                     });
                     success = true;
-                } catch (e) {
-                    console.error("Transaction contention, retrying...", e);
-                    attempts++;
-                    await new Promise(r => setTimeout(r, 500)); // Wait half a second before retrying
-                }
+                } catch (e) { attempts++; await new Promise(r => setTimeout(r, 400)); }
             }
             
             btn.innerText = "⚡ QUICK RACE"; btn.disabled = false; window.isSearchingQuickRace = false;
-
             if (success) {
                 if (isCreating) window.hostRoom(targetCode, false);
                 else { document.getElementById('join-code-input').value = targetCode; window.joinRoom(targetCode, false, true); }
-            } else {
-                alert("Servers are heavily loaded. Please try again.");
-            }
+            } else alert("MATCHMAKING BUSY. TRY AGAIN.");
         };
 
         window.doGuest = () => signInAnonymously(auth);
@@ -145,7 +134,6 @@
         input { padding: 15px; font-size: 1.2rem; text-align: center; border: 4px solid #fff; background: #222; color: #00ffcc; margin-bottom: 10px; border-radius: 4px; width: 300px; text-transform: uppercase;}
         #lobby-grid { width: 90%; max-width: 600px; background: rgba(0,0,0,0.6); border: 2px solid #333; border-radius: 10px; padding: 20px; margin: 20px 0; max-height: 40vh; overflow-y: auto;}
         .lobby-slot { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #444; font-size: 1.2rem; }
-        
         .status-box { padding: 4px 10px; border-radius: 4px; font-size: 0.9rem; font-weight: bold; text-align: center; width: 130px; display: inline-block; text-transform: uppercase; }
         .status-ready { border: 2px solid #00ffcc; color: #00ffcc; box-shadow: 0 0 10px rgba(0,255,204,0.6); }
         .status-not-ready { border: 2px solid #ff4444; color: #ff4444; box-shadow: 0 0 10px rgba(255,68,68,0.6); }
@@ -157,26 +145,24 @@
         #btn-gas { width: 85px; height: 85px; background: rgba(0, 255, 100, 0.2); border-color: #0f8; }
         #btn-brake { position: absolute; right: 0; bottom: 95px; width: 85px; height: 60px; background: rgba(255, 0, 0, 0.2); border-color: #f00; font-size: 1rem;}
         #btn-nitro { width: 75px; height: 65px; background: rgba(0, 240, 255, 0.2); border-color: #0ff; font-size: 1rem; margin-right: 85px;}
-        #countdown-ui { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 8rem; z-index: 25; font-weight: bold; pointer-events: none; text-shadow: 8px 8px 0 rgba(0,0,0,0.5); color: #fff; text-align: center; }
+        #countdown-ui { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 12rem; z-index: 25; font-weight: bold; pointer-events: none; text-shadow: 8px 8px 0 rgba(0,0,0,0.5); color: #fff; text-align: center; }
         #spectator-ui { position: absolute; bottom: 20px; right: 20px; text-align: center; z-index: 45; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; border: 2px solid #ff4444; width: 180px; box-shadow: 0 0 10px rgba(255,0,0,0.5); }
         .spec-btn { background: #222; color: #fff; border: 1px solid #777; padding: 8px; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 45%; }
     </style>
 </head>
 <body>
-
     <button id="global-fs-btn" onclick="window.toggleFS()" style="position:fixed; top:25px; right:10px; z-index:100; background:rgba(255,255,255,0.2); border:1px solid #fff; color:#fff; padding:5px 10px; border-radius:4px; font-size:0.7rem; cursor:pointer;">⛶ FULLSCREEN</button>
-
     <div id="progress-bar" class="hidden"></div>
     <div id="game-container"><canvas id="gameCanvas"></canvas></div>
     <div id="hud-player-name"></div>
-
+    
     <div id="hud" class="hidden">
         <div><span class="hud-label">SPEED</span> <br><span id="hud-speed">0</span> KM/H</div>
         <div style="margin-top:10px;"><span class="hud-label">DISTANCE</span> <br><span id="hud-dist">0</span> / 10000M</div>
         <div style="margin-top:20px;" class="hud-label">NITROUS</div>
         <div id="nitro-container"><div id="nitro-fill"></div></div>
     </div>
-
+    
     <div id="spectator-ui" class="hidden">
         <div style="color:#ff4444; font-size:1rem; margin-bottom: 5px; font-weight:bold;">WRECKED!</div>
         <div style="font-size:0.8rem; color:#fff; margin-bottom: 10px;">WATCHING:<br><span id="spec-name" style="color:#00ffcc; font-size: 1.1rem;">---</span></div>
@@ -236,7 +222,6 @@
         <button id="btn-toggle-ready" class="btn btn-main" style="width: 200px; margin-top: 20px; transition: background 0.2s;" onclick="window.toggleReady()">READY</button>
         <button id="btn-host-start" class="btn btn-main hidden" style="width: 250px; margin-top: 20px; background:#FFD700;" onclick="window.forceHostStart()">START ENGINE</button>
         <p id="txt-waiting-host" class="hidden" style="color:#FFD700; margin-top:20px; font-size:1.2rem;">WAITING FOR HOST TO START...</p>
-        
         <br>
         <button class="btn" style="background:#ff4444; color:#fff; margin-top:10px;" onclick="window.leaveLobby()">LEAVE LOBBY</button>
     </div>
@@ -255,12 +240,10 @@
     const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
     const TOTAL_DIST = 10000; const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-    let peer, isHost = false, roomCode = "", roomPass = "", myPeerId = "";
-    let isPrivateRoom = false; 
+    let peer, isHost = false, roomCode = "", roomPass = "", myPeerId = "", isPrivateRoom = false; 
     let clients = [], hostConnToLobby = null, gameState = 'AUTH', raceFinished = false, crossTriggered = false; 
     let p1 = { lane: 1, camLane: 1, dist: 0, speed: 0, nitro: 100, turboActive: false, isBraking: false, dead: false, colIdx: 0, camZoom: 0.55, finishTime: 999999999, isReady: false };
     let traffic = [], keys = {}, lastTime = 0, netTimer = 0;
-    
     let hostPingInterval = null, clientPingInterval = null, autoStartInterval = null, autoStartSeconds = 30, ignitionLocked = false;
     window.spectatingId = null;
 
@@ -284,15 +267,9 @@
         const btnReady = document.getElementById('btn-toggle-ready');
         const btnHostStart = document.getElementById('btn-host-start');
         const txtWait = document.getElementById('txt-waiting-host');
-        
         btnReady.classList.add('hidden'); btnHostStart.classList.add('hidden'); txtWait.classList.add('hidden');
-        
-        if (isPrivateRoom) {
-            if (isHost) btnHostStart.classList.remove('hidden');
-            else { btnReady.classList.remove('hidden'); txtWait.classList.remove('hidden'); }
-        } else {
-            btnReady.classList.remove('hidden');
-        }
+        if (isPrivateRoom) { if (isHost) btnHostStart.classList.remove('hidden'); else { btnReady.classList.remove('hidden'); txtWait.classList.remove('hidden'); } } 
+        else btnReady.classList.remove('hidden');
     }
 
     window.toggleReady = () => {
@@ -308,25 +285,21 @@
         if (p1.isReady) { btn.style.background = "#ff4444"; btn.innerText = "NOT READY"; } else { btn.style.background = "#00ffcc"; btn.innerText = "READY"; }
     }
 
-    window.forceHostStart = () => {
-        if (isPrivateRoom && isHost) { triggerIgnition(); }
-    }
+    window.forceHostStart = () => { if (isPrivateRoom && isHost) triggerIgnition(); }
 
     window.hostRoom = (overrideCode = null, isPrivate = false) => {
-        isPrivateRoom = isPrivate;
-        roomPass = isPrivate ? document.getElementById('host-pass').value.trim() : "";
+        isPrivateRoom = isPrivate; roomPass = isPrivate ? document.getElementById('host-pass').value.trim() : "";
         roomCode = overrideCode || Math.random().toString(36).substring(2,7).toUpperCase();
-        
         if (peer) { peer.destroy(); peer = null; }
-        
         setTimeout(() => {
             peer = new Peer(roomCode);
             peer.on('open', (id) => {
                 isHost = true; myPeerId = id; clients = []; raceFinished = false; ignitionLocked = false; p1.isReady = false;
-                window.showScreen('screen-lobby'); applyLobbyUIMode();
+                window.showScreen('screen-lobby'); applyLobbyUIMode(); updateReadyButtonUI(); 
                 document.getElementById('lobby-code-display').innerText = "ROOM: " + roomCode;
                 document.getElementById('lobby-status').innerText = isPrivate ? "PRIVATE LOBBY" : "PUBLIC MATCHMAKING";
-                p1.colIdx = 0; updateReadyButtonUI(); updateLobbyUI();
+                window.lobbyPlayers = [{ id: myPeerId, name: window.playerName, isReady: p1.isReady, isHost: true }];
+                updateLobbyUI();
 
                 if (hostPingInterval) clearInterval(hostPingInterval);
                 hostPingInterval = setInterval(() => {
@@ -334,8 +307,7 @@
                     clients.forEach(c => { if (now - c.lastSeen > 6000) { c.dead = true; zCount++; if(gameState === 'LOBBY') { try { c.conn.close(); } catch(e){} } } });
                     if (zCount > 0 && gameState === 'LOBBY') { 
                         clients = clients.filter(c => now - c.lastSeen <= 6000); 
-                        if (!isPrivateRoom) checkPublicStartConditions(); 
-                        broadcastLobbyState(); 
+                        if (!isPrivateRoom) checkPublicStartConditions(); broadcastLobbyState(); 
                     } else if (zCount > 0 && gameState === 'RACE') checkRaceState();
                 }, 3000);
             });
@@ -361,11 +333,8 @@
                     let c = clients.find(cl => cl.id === conn.peer);
                     if(c) {
                         c.dead = true; 
-                        if (gameState === 'LOBBY') { 
-                            clients = clients.filter(cl => cl.id !== conn.peer); 
-                            if(!isPrivateRoom) checkPublicStartConditions(); 
-                            broadcastLobbyState(); 
-                        } else checkRaceState();
+                        if (gameState === 'LOBBY') { clients = clients.filter(cl => cl.id !== conn.peer); if(!isPrivateRoom) checkPublicStartConditions(); broadcastLobbyState(); } 
+                        else checkRaceState();
                     }
                 });
             });
@@ -386,6 +355,7 @@
             peer = new Peer();
             peer.on('open', (id) => {
                 myPeerId = id; isHost = false; clients = []; raceFinished = false; crossTriggered = false; ignitionLocked = false; p1.isReady = false;
+                window.lobbyPlayers = [];
                 hostConnToLobby = peer.connect(roomCode);
                 
                 hostConnToLobby.on('open', () => {
@@ -394,64 +364,61 @@
                 });
                 
                 hostConnToLobby.on('data', data => {
-                    if(data.type === 'rejected') { 
-                        alert(data.msg); 
-                        if(isAutoFailover) { window.leaveLobby(); window.hostRoom(roomCode, false); } 
-                        else window.leaveLobby(); 
+                    if(data.type === 'rejected') { alert(data.msg); if(isAutoFailover) { window.leaveLobby(); window.hostRoom(roomCode, false); } else window.leaveLobby(); }
+                    if(data.type === 'accepted') { p1.colIdx = data.colIdx; isPrivateRoom = data.isPrivate; window.showScreen('screen-lobby'); applyLobbyUIMode(); updateReadyButtonUI(); document.getElementById('lobby-code-display').innerText = "ROOM: " + roomCode; }
+                    
+                    if(data.type === 'lobby_state') { 
+                        // ONE-WAY VALVE: Reject lobby updates if the race sequence has started!
+                        if (gameState !== 'LOBBY') return;
+                        window.lobbyPlayers = data.players; updateLobbyUI(); handleLobbyTimersSync(data); 
                     }
-                    if(data.type === 'accepted') { 
-                        p1.colIdx = data.colIdx; isPrivateRoom = data.isPrivate; 
-                        window.showScreen('screen-lobby'); applyLobbyUIMode(); updateReadyButtonUI(); 
-                        document.getElementById('lobby-code-display').innerText = "ROOM: " + roomCode; 
-                    }
-                    if(data.type === 'lobby_state') { clients = data.clients; updateLobbyUI(); handleLobbyTimersSync(data); }
+                    
                     if(data.type === 'ignition') { startSnapCountdown(); }
                     if(data.type === 'start_race') { traffic = data.traffic; executeStart(); }
-                    if(data.type === 'game_sync') { clients = data.clients; traffic = data.traffic; }
+                    
+                    if(data.type === 'game_sync') { 
+                        // Filter out my own data so I don't draw a duplicate ghost on top of myself
+                        clients = data.clients.filter(c => c.id !== myPeerId); 
+                        traffic = data.traffic; 
+                    }
+                    
                     if(data.type === 'race_over') { showFinalResults(data.rankings, data.reason); }
                 });
                 
                 hostConnToLobby.on('close', () => {
                     if(gameState === 'RACE') showFinalResults([], "LOBBY SERVER DROPPED");
                     else if (gameState === 'LOBBY') {
-                        if (!isPrivateRoom && clients.length > 0 && clients[0].id === myPeerId) {
-                            let oldClients = [...clients]; oldClients.shift();
-                            window.leaveLobby(); window.hostRoom(roomCode, false);
-                        } else if (!isPrivateRoom) {
-                            setTimeout(() => { window.leaveLobby(); window.joinRoom(roomCode, false, true); }, 1500);
-                        } else {
-                            alert("HOST CLOSED PRIVATE LOBBY"); window.leaveLobby();
-                        }
+                        let iAmNext = false;
+                        if (window.lobbyPlayers && window.lobbyPlayers.length > 1 && window.lobbyPlayers[1].id === myPeerId) iAmNext = true;
+                        if (!isPrivateRoom && iAmNext) { window.leaveLobby(); window.hostRoom(roomCode, false); } 
+                        else if (!isPrivateRoom) { setTimeout(() => { window.leaveLobby(); window.joinRoom(roomCode, false, true); }, 1500); } 
+                        else { alert("HOST CLOSED PRIVATE LOBBY"); window.leaveLobby(); }
                     }
                 });
             });
-            peer.on('error', () => { 
-                if(joinBtn) {joinBtn.disabled = false; joinBtn.innerText = "CONNECT";}
-                if(isAutoFailover && !isPrivateRoom) { window.leaveLobby(); window.hostRoom(roomCode, false); }
-            });
+            peer.on('error', () => { if(joinBtn) {joinBtn.disabled = false; joinBtn.innerText = "CONNECT";} if(isAutoFailover && !isPrivateRoom) { window.leaveLobby(); window.hostRoom(roomCode, false); } });
         }, 100);
     };
 
     function broadcastLobbyState() {
         if (!isHost) return;
-        let safeClients = clients.map(c => ({ id: c.id, name: c.name, dist: c.dist, lane: c.lane, speed: c.speed, dead: c.dead, isReady: c.isReady, colIdx: c.colIdx }));
-        let stateData = { type: 'lobby_state', clients: safeClients, autoStartSecs: autoStartSeconds, hasAutoStart: (autoStartInterval !== null) };
+        let unifiedPlayers = [{ id: myPeerId, name: window.playerName, isReady: p1.isReady, isHost: true }];
+        clients.forEach(c => unifiedPlayers.push({ id: c.id, name: c.name, isReady: c.isReady, isHost: false }));
+        window.lobbyPlayers = unifiedPlayers;
+        let stateData = { type: 'lobby_state', players: unifiedPlayers, autoStartSecs: autoStartSeconds, hasAutoStart: (autoStartInterval !== null) };
         clients.forEach(c => c.conn.send(stateData));
         updateLobbyUI(); handleLobbyTimersSync(stateData);
     }
 
     function checkPublicStartConditions() {
         if (!isHost || gameState !== 'LOBBY' || ignitionLocked || isPrivateRoom) return;
-        let total = clients.length + 1;
-        let readyCount = clients.filter(c => c.isReady).length + (p1.isReady ? 1 : 0);
+        let total = clients.length + 1; let readyCount = clients.filter(c => c.isReady).length + (p1.isReady ? 1 : 0);
         let threshold = (total === 2) ? 2 : Math.floor(total / 2) + 1;
 
         if (readyCount >= threshold && total > 1) { triggerIgnition(); } 
         else {
-            if (total === 10 && !autoStartInterval) {
-                autoStartSeconds = 30;
-                autoStartInterval = setInterval(() => { autoStartSeconds--; broadcastLobbyState(); if (autoStartSeconds <= 0) triggerIgnition(); }, 1000);
-            } else if (total < 10 && autoStartInterval) { clearInterval(autoStartInterval); autoStartInterval = null; }
+            if (total === 10 && !autoStartInterval) { autoStartSeconds = 30; autoStartInterval = setInterval(() => { autoStartSeconds--; broadcastLobbyState(); if (autoStartSeconds <= 0) triggerIgnition(); }, 1000); } 
+            else if (total < 10 && autoStartInterval) { clearInterval(autoStartInterval); autoStartInterval = null; }
         }
     }
 
@@ -467,16 +434,16 @@
     }
 
     function startSnapCountdown() {
-        ignitionLocked = true; updateReadyButtonUI();
-        window.showScreen(null); gameState = 'COUNTDOWN';
-        const ui = document.getElementById('countdown-ui'); ui.classList.remove('hidden');
-        document.getElementById('spectator-ui').classList.add('hidden');
-        
+        if (gameState !== 'LOBBY') return;
+        ignitionLocked = true; updateReadyButtonUI(); window.showScreen(null); gameState = 'COUNTDOWN';
+        const ui = document.getElementById('countdown-ui'); ui.classList.remove('hidden'); document.getElementById('spectator-ui').classList.add('hidden');
         let count = 3; ui.innerText = count;
-        let t = setInterval(() => { 
+        
+        if (window.countdownTimer) clearInterval(window.countdownTimer);
+        window.countdownTimer = setInterval(() => { 
             count--; if (count > 0) ui.innerText = count; else if (count === 0) ui.innerText = "GO!";
             if(count < 0) { 
-                clearInterval(t); ui.classList.add('hidden');
+                clearInterval(window.countdownTimer); ui.classList.add('hidden');
                 if (isHost) {
                     if(isPrivateRoom) { db && runTransaction(db, async(tr)=>{ const r=doc(db,"matchmaking","LATEST_PUBLIC"); tr.update(r,{status:"LOCKED"});}).catch(()=>{}); }
                     traffic = []; let types = ['speedster', 'commuter', 'tank']; let lastZ = [0, 0, 0]; 
@@ -499,28 +466,29 @@
     }
 
     function executeStart() {
-        window.needsTimeReset = true; // Signal the render loop to reset the clock!
+        // OVERRIDE: Clear any lingering intervals and force the state anchor
+        if (window.countdownTimer) clearInterval(window.countdownTimer);
+        document.getElementById('countdown-ui').classList.add('hidden');
+        lastTime = performance.now(); 
+        
+        gameState = 'RACE'; p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; raceFinished = false; crossTriggered = false; p1.camZoom = 0.55; p1.finishTime = 999999999;
         if(isTouchDevice) document.getElementById('mobile-controls').classList.remove('hidden');
-        document.getElementById('hud').classList.remove('hidden');
-        window.spectatingId = null;
-        p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; raceFinished = false; crossTriggered = false; p1.camZoom = 0.55; p1.finishTime = 999999999;
-        gameState = 'RACE'; 
+        document.getElementById('hud').classList.remove('hidden'); window.spectatingId = null;
     }
 
     function updateLobbyUI() {
         const grid = document.getElementById('lobby-grid'); grid.innerHTML = "";
-        
-        function getStatusSpan(isReady, isCreator) {
-            if (isPrivateRoom && isCreator) return `<span class="status-box status-host">HOST</span>`;
-            return isReady ? `<span class="status-box status-ready">READY</span>` : `<span class="status-box status-not-ready">NOT READY</span>`;
-        }
-        
-        grid.innerHTML += `<div class="lobby-slot"><span>1. ${window.playerName}</span> ${getStatusSpan(p1.isReady, isHost)}</div>`;
-        for (let i = 0; i < 9; i++) {
-            if (i < clients.length) {
-                let c = clients[i];
-                grid.innerHTML += `<div class="lobby-slot"><span>${i+2}. ${c.name}</span> ${getStatusSpan(c.isReady, false)}</div>`;
-            } else grid.innerHTML += `<div class="lobby-slot" style="color:#666;"><span>${i+2}. [ EMPTY SLOT ]</span> </div>`;
+        let playersToRender = window.lobbyPlayers || [];
+        if (playersToRender.length === 0) playersToRender = [{ id: myPeerId, name: window.playerName, isReady: p1.isReady, isHost: isHost }];
+
+        for (let i = 0; i < 10; i++) {
+            if (i < playersToRender.length) {
+                let p = playersToRender[i];
+                let isMe = (p.id === myPeerId);
+                let hostTag = (isPrivateRoom && p.isHost) ? `<span class="status-box status-host">HOST</span>` : '';
+                let statusTag = p.isReady ? `<span class="status-box status-ready">READY</span>` : `<span class="status-box status-not-ready">NOT READY</span>`;
+                grid.innerHTML += `<div class="lobby-slot"><span style="${isMe ? 'color:#00ffcc;' : ''}">${i+1}. ${p.name}</span> ${hostTag || statusTag}</div>`;
+            } else { grid.innerHTML += `<div class="lobby-slot" style="color:#666;"><span>${i+1}. [ EMPTY SLOT ]</span> </div>`; }
         }
     }
 
@@ -532,9 +500,8 @@
         let totalPlayers = clients.length + 1;
 
         if (totalAlive === 0) triggerGlobalFinish("ALL RACERS WRECKED!");
-        else if (totalPlayers >= 2 && totalAlive === 1 && totalFinished === 0) {
-            if (myAlive) p1.dist = TOTAL_DIST; else aliveClients[0].dist = TOTAL_DIST; triggerGlobalFinish("SOLE SURVIVOR! ALL OTHERS WRECKED.");
-        } else if (totalAlive === totalFinished && totalAlive > 0) triggerGlobalFinish("ALL SURVIVORS CROSSED THE LINE!");
+        else if (totalPlayers >= 2 && totalAlive === 1 && totalFinished === 0) { if (myAlive) p1.dist = TOTAL_DIST; else aliveClients[0].dist = TOTAL_DIST; triggerGlobalFinish("SOLE SURVIVOR! ALL OTHERS WRECKED."); } 
+        else if (totalAlive === totalFinished && totalAlive > 0) triggerGlobalFinish("ALL SURVIVORS CROSSED THE LINE!");
     }
 
     function triggerGlobalFinish(reasonStr = "RACE CONCLUDED") {
@@ -542,8 +509,7 @@
         let allRacers = clients.map(c => ({id: c.id, name: c.name, dist: c.dist, dead: c.dead, finishTime: c.finishTime || 999999999}));
         allRacers.push({id: myPeerId, name: window.playerName, dist: p1.dist, dead: p1.dead, finishTime: p1.finishTime || 999999999});
         allRacers.sort((a, b) => { if (!a.dead && !b.dead) return a.finishTime - b.finishTime; if (!a.dead && b.dead) return -1; if (a.dead && !b.dead) return 1; return b.dist - a.dist; });
-        clients.forEach(c => c.conn.send({ type: 'race_over', rankings: allRacers, reason: reasonStr }));
-        showFinalResults(allRacers, reasonStr);
+        clients.forEach(c => c.conn.send({ type: 'race_over', rankings: allRacers, reason: reasonStr })); showFinalResults(allRacers, reasonStr);
     }
 
     function updateProgressBar() {
@@ -684,11 +650,10 @@
         ctx.restore();
     }
 
-    // THE CLOCK FIX
     function loop(t) { 
-        if (window.needsTimeReset || lastTime === 0) { lastTime = t; window.needsTimeReset = false; }
+        if (lastTime === 0) lastTime = t; 
         let dt = (t - lastTime) / 1000; lastTime = t; 
-        if (dt > 0.1) dt = 0.016; // Prevents the car from jumping forward if the tab lagged
+        if (dt > 0.1) dt = 0.016; 
         
         if(gameState === 'RACE') update(dt); 
         if(gameState !== 'AUTH' && gameState !== 'MENU') draw();
@@ -729,10 +694,11 @@
     window.addEventListener('beforeunload', () => { window.leaveLobby(); });
     window.leaveLobby = () => {
         if(hostPingInterval) clearInterval(hostPingInterval); if(clientPingInterval) clearInterval(clientPingInterval); if(autoStartInterval) clearInterval(autoStartInterval);
+        if(window.countdownTimer) clearInterval(window.countdownTimer);
         if(hostConnToLobby) { try{ hostConnToLobby.close(); } catch(e) {} hostConnToLobby = null; }
         if(peer) { try{ peer.destroy(); } catch(e) {} peer = null; }
-        clients = []; isHost = false; raceFinished = false; crossTriggered = false; window.spectatingId = null; ignitionLocked = false; p1.isReady = false;
-        lastTime = 0; // FULL CLOCK RESET
+        clients = []; isHost = false; raceFinished = false; crossTriggered = false; window.spectatingId = null; ignitionLocked = false; p1.isReady = false; window.lobbyPlayers = [];
+        lastTime = 0; 
         window.showScreen('screen-menu'); document.getElementById('progress-bar').classList.add('hidden'); document.getElementById('spectator-ui').classList.add('hidden');
     };
 </script>
