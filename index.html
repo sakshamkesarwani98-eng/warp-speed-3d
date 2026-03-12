@@ -279,7 +279,8 @@
     let p1 = { lane: 1, camLane: 1, dist: 0, speed: 0, nitro: 100, turboActive: false, isBraking: false, dead: false, colIdx: 0, camZoom: 0.55, finishTime: 999999999 };
     let traffic = [], keys = {}, lastTime = 0, netTimer = 0;
     
-    // Spectator Variables
+    let hostPingInterval = null;
+    let clientPingInterval = null;
     window.spectatingId = null;
 
     const COLORS = [
@@ -316,21 +317,9 @@
     let gasBtnHeld = false;
     function bindTouch(btnId, keyCodes) {
         const btn = document.getElementById(btnId);
-        btn.addEventListener('touchstart', (e) => { 
-            e.preventDefault(); 
-            keyCodes.forEach(k => keys[k] = true); 
-            if(btnId === 'btn-gas') gasBtnHeld = true;
-        });
-        btn.addEventListener('touchend', (e) => { 
-            e.preventDefault(); 
-            keyCodes.forEach(k => keys[k] = false); 
-            if(btnId === 'btn-gas') gasBtnHeld = false;
-        });
-        btn.addEventListener('touchcancel', (e) => { 
-            e.preventDefault(); 
-            keyCodes.forEach(k => keys[k] = false); 
-            if(btnId === 'btn-gas') gasBtnHeld = false;
-        });
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); keyCodes.forEach(k => keys[k] = true); if(btnId === 'btn-gas') gasBtnHeld = true; });
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); keyCodes.forEach(k => keys[k] = false); if(btnId === 'btn-gas') gasBtnHeld = false; });
+        btn.addEventListener('touchcancel', (e) => { e.preventDefault(); keyCodes.forEach(k => keys[k] = false); if(btnId === 'btn-gas') gasBtnHeld = false; });
     }
     bindTouch('btn-left', ['ArrowLeft', 'KeyA']);
     bindTouch('btn-right', ['ArrowRight', 'KeyD']);
@@ -338,21 +327,19 @@
     bindTouch('btn-brake', ['ArrowDown', 'KeyS']);
 
     const nitroBtn = document.getElementById('btn-nitro');
-    nitroBtn.addEventListener('touchstart', (e) => { 
-        e.preventDefault(); 
-        keys['ShiftLeft'] = true; 
-        keys['ArrowUp'] = true; 
-    });
-    nitroBtn.addEventListener('touchend', (e) => { 
-        e.preventDefault(); 
-        keys['ShiftLeft'] = false; 
-        if (!gasBtnHeld) keys['ArrowUp'] = false; 
-    });
+    nitroBtn.addEventListener('touchstart', (e) => { e.preventDefault(); keys['ShiftLeft'] = true; keys['ArrowUp'] = true; });
+    nitroBtn.addEventListener('touchend', (e) => { e.preventDefault(); keys['ShiftLeft'] = false; if (!gasBtnHeld) keys['ArrowUp'] = false; });
     
     window.onkeydown = e => { keys[e.code] = true; };
     window.onkeyup = e => { keys[e.code] = false; };
 
-    // Spectator Controls
+    // Global Client Heartbeat Loop
+    clientPingInterval = setInterval(() => {
+        if (!isHost && hostConnToLobby && hostConnToLobby.open) {
+            hostConnToLobby.send({type: 'ping'});
+        }
+    }, 2000);
+
     window.specNext = () => {
         let alive = clients.filter(c => !c.dead);
         if(!alive.length) return;
@@ -380,6 +367,29 @@
             document.getElementById('lobby-status').innerText = roomPass ? "LOBBY SECURED WITH PASSWORD" : "WAITING FOR RACERS...";
             p1.colIdx = 0; 
             updateLobbyUI();
+
+            // Host Zombie Sweep Monitor
+            if (hostPingInterval) clearInterval(hostPingInterval);
+            hostPingInterval = setInterval(() => {
+                let now = Date.now();
+                let hasZombies = false;
+                clients.forEach(c => {
+                    if (now - c.lastSeen > 6000) {
+                        c.dead = true;
+                        hasZombies = true;
+                        if(gameState === 'LOBBY') { try { c.conn.close(); } catch(e){} }
+                    }
+                });
+                
+                if (hasZombies) {
+                    if (gameState === 'LOBBY') {
+                        clients = clients.filter(c => now - c.lastSeen <= 6000);
+                        broadcastLobbyState();
+                    } else if (gameState === 'RACE') {
+                        checkRaceState();
+                    }
+                }
+            }, 3000);
         });
 
         peer.on('connection', conn => {
@@ -388,32 +398,33 @@
                     if (clients.length >= 9) { conn.send({type: 'rejected', msg: 'ROOM FULL'}); setTimeout(()=>conn.close(), 500); return; }
                     if (roomPass && data.pass !== roomPass) { conn.send({type: 'rejected', msg: 'INVALID PASSWORD'}); setTimeout(()=>conn.close(), 500); return; }
                     
-                    clients.push({ conn: conn, id: conn.peer, name: data.name, dist: 0, lane: 1, speed: 0, dead: false, isBraking: false, colIdx: clients.length + 1, finishTime: 999999999 });
+                    clients.push({ conn: conn, id: conn.peer, name: data.name, dist: 0, lane: 1, speed: 0, dead: false, isBraking: false, colIdx: clients.length + 1, finishTime: 999999999, lastSeen: Date.now() });
                     conn.send({type: 'accepted', colIdx: clients.length});
                     broadcastLobbyState();
                 }
-                if (data.type === 'sync' && gameState === 'RACE') {
-                    let c = clients.find(cl => cl.id === conn.peer);
-                    if (c) { 
+                
+                let c = clients.find(cl => cl.id === conn.peer);
+                if (c) {
+                    c.lastSeen = Date.now();
+                    if (data.type === 'sync' && gameState === 'RACE') {
                         c.dist = data.dist; c.lane = data.lane; c.speed = data.speed; c.isBraking = data.isBraking; 
-                        if(data.dead && !c.dead) c.dead = true; // register wreck
+                        if(data.dead && !c.dead) c.dead = true; 
                     }
-                }
-                // Timestamp accuracy check
-                if (data.type === 'crossed_finish_line') {
-                    let c = clients.find(cl => cl.id === conn.peer);
-                    if (c && !c.dead && c.dist < TOTAL_DIST) {
-                        c.dist = TOTAL_DIST;
-                        c.finishTime = performance.now(); // Host marks exact time
+                    if (data.type === 'crossed_finish_line') {
+                        if (!c.dead && c.dist < TOTAL_DIST) {
+                            c.dist = TOTAL_DIST; c.finishTime = performance.now(); 
+                        }
                     }
                 }
             });
             conn.on('close', () => {
                 let c = clients.find(cl => cl.id === conn.peer);
-                if(c) c.dead = true; // If someone leaves mid-race, they wreck.
+                if(c) c.dead = true; 
                 if (gameState === 'LOBBY') {
                     clients = clients.filter(cl => cl.id !== conn.peer);
                     broadcastLobbyState();
+                } else {
+                    checkRaceState();
                 }
             });
         });
@@ -534,7 +545,6 @@
         }, 1000);
     }
 
-    // Host checking logic for Sole Survivor and All Finished
     function checkRaceState() {
         if(gameState !== 'RACE' || raceFinished) return;
         
@@ -561,11 +571,9 @@
         if (raceFinished) return;
         raceFinished = true;
         
-        // Compile Leaderboard Array
         let allRacers = clients.map(c => ({id: c.id, name: c.name, dist: c.dist, dead: c.dead, finishTime: c.finishTime || 999999999}));
         allRacers.push({id: myPeerId, name: window.playerName, dist: p1.dist, dead: p1.dead, finishTime: p1.finishTime || 999999999});
         
-        // Sorting Logic: Finished (by time) > Wrecked (by distance)
         allRacers.sort((a, b) => {
             if (!a.dead && !b.dead) return a.finishTime - b.finishTime; 
             if (!a.dead && b.dead) return -1; 
@@ -651,7 +659,6 @@
                 document.getElementById('hud-speed').innerText = "FINISH";
             }
         } else {
-            // Spectator Camera Lerp
             let target = clients.find(c => c.id === window.spectatingId);
             if (target && !target.dead) {
                 p1.camLane += (target.lane - p1.camLane) * 8 * dt;
@@ -659,7 +666,6 @@
             } else { window.specNext(); }
         }
 
-        // HUD Updates
         let nitroFill = document.getElementById('nitro-fill'); nitroFill.style.width = p1.nitro + "%";
         if (!p1.turboActive && p1.nitro < 20) { nitroFill.style.background = "linear-gradient(90deg, #ff0055, #ff4444)"; } 
         else { nitroFill.style.background = "linear-gradient(90deg, #00f0ff, #00ffcc)"; }
@@ -697,7 +703,6 @@
 
         let viewState = { dist: p1.dist, camLane: p1.camLane, camZoom: p1.camZoom, speed: p1.speed, turbo: p1.turboActive };
         
-        // Spectator target HUD sync
         if (p1.dead && window.spectatingId) {
             let target = clients.find(c => c.id === window.spectatingId);
             if (target) {
@@ -828,7 +833,7 @@
         }());
     }
 
-    // Grand Leaderboard Render
+    // Grand Leaderboard Render (with DEAD LAST check)
     function showFinalResults(allRacers, reasonStr) {
         if(gameState === 'END') return;
         gameState = 'END';
@@ -848,10 +853,17 @@
         let myRank = allRacers.findIndex(r => r.id === myPeerId) + 1;
         const title = document.getElementById('go-title');
         const trophy = document.getElementById('trophy-container');
+        const rankDisplay = document.getElementById('go-rank');
+
+        // Dead Last Logic Check
+        let isDeadLast = (myRank === allRacers.length && allRacers.length > 1);
 
         if (myData && myData.dead) {
             title.innerText = "YOU WRECKED!"; title.style.color = "#ff4444";
             trophy.innerText = "💥"; trophy.style.textShadow = "0 0 20px rgba(255,0,0,0.8)";
+        } else if (isDeadLast) {
+            title.innerText = "YOU LOST!"; title.style.color = "#777";
+            trophy.innerText = "🐢"; trophy.style.textShadow = "none";
         } else {
             title.innerText = "FINISH!"; title.style.color = "#00ffcc";
             if (myRank <= 3) { trophy.innerText = "🏆"; trophy.style.textShadow = "0 0 20px rgba(255,215,0,0.8)"; fireConfetti(); } 
@@ -859,7 +871,14 @@
         }
 
         document.getElementById('go-reason').innerText = reasonStr || "RACE CONCLUDED";
-        document.getElementById('go-rank').innerText = "YOUR RANK: " + myRank + " / " + allRacers.length;
+        
+        if (isDeadLast) {
+            rankDisplay.innerText = "DEAD LAST";
+            rankDisplay.style.color = "#888";
+        } else {
+            rankDisplay.innerText = "YOUR RANK: " + myRank + " / " + allRacers.length;
+            rankDisplay.style.color = "#FFD700";
+        }
 
         // Build Table
         let tableHTML = `<table style="width:100%; text-align:left; border-collapse:collapse; font-size:1.2rem;">`;
@@ -881,6 +900,7 @@
     }
 
     window.leaveLobby = () => {
+        if(hostPingInterval) clearInterval(hostPingInterval);
         if(hostConnToLobby) { try{ hostConnToLobby.close(); } catch(e) {} hostConnToLobby = null; }
         if(peer) { try{ peer.destroy(); } catch(e) {} peer = null; }
         clients = []; isHost = false; raceFinished = false; crossTriggered = false; window.spectatingId = null;
