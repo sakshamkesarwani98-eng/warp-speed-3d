@@ -11,6 +11,7 @@
         import { getAuth, signInWithPopup, GoogleAuthProvider, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+        // Your Firebase configuration integrated
         const firebaseConfig = {
             apiKey: "AIzaSyDppG77Saed8i49ZzeTlgougqRfYwV0D4s",
             authDomain: "warpspeed3d-771b7.firebaseapp.com",
@@ -29,6 +30,7 @@
         window.playerName = "";
         window.userUID = "";
 
+        // Identity Gate & Routing
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 window.userUID = user.uid;
@@ -51,7 +53,7 @@
             }
         });
 
-        // ID-07: Username Restrictions
+        // Unique Username Claim Logic
         window.claimUsername = async () => {
             const inputName = document.getElementById('gate-name-input').value.trim().toUpperCase();
             const errDiv = document.getElementById('gate-err');
@@ -85,7 +87,7 @@
             }
         };
 
-        // ID-10 & Quick Race Double-Spawn Shield
+        // Isolated Quick Race with Double-Spawn Shield
         window.isSearchingQuickRace = false;
         window.findQuickRace = async () => {
             if (window.isSearchingQuickRace) return;
@@ -134,7 +136,7 @@
         #game-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; background: #000; }
         canvas { background: #87CEEB; height: 100%; width: 100%; max-width: 1400px; display: block; }
         
-        /* New: Top Position Bar */
+        /* Top Position Bar */
         #progress-bar { position: absolute; top: 0; left: 0; width: 100vw; height: 12px; background: rgba(0,0,0,0.6); z-index: 50; border-bottom: 2px solid #333;}
         .prog-pip { position: absolute; top: -4px; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; transition: left 0.1s linear; box-shadow: 0 0 10px rgba(0,0,0,0.8); }
 
@@ -266,7 +268,6 @@
     </div>
 
 <script>
-    // ID-01: Fullscreen Logic
     window.toggleFS = () => {
         if (!document.fullscreenElement) {
             document.documentElement.requestFullscreen().catch(e => console.log(e));
@@ -287,12 +288,12 @@
     let hostConnToLobby = null; 
     let gameState = 'AUTH'; 
     let raceFinished = false; 
-    let crossTriggered = false; // Result Pending Fix
+    let crossTriggered = false; 
     
-    let p1 = { lane: 1, camLane: 1, dist: 0, speed: 0, nitro: 100, turboActive: false, isBraking: false, dead: false, colIdx: 0 };
+    // Added camZoom for smooth hyper-speed camera interpolation
+    let p1 = { lane: 1, camLane: 1, dist: 0, speed: 0, nitro: 100, turboActive: false, isBraking: false, dead: false, colIdx: 0, camZoom: 0.55 };
     let traffic = [], keys = {}, lastTime = 0, netTimer = 0;
 
-    // Expanded Synthwave Palette
     const COLORS = [
         { f: "#b02", t: "#d03", s: "#801", b: "#e04" }, 
         { f: "#15b", t: "#26c", s: "#049", b: "#37d" }, 
@@ -309,7 +310,6 @@
         { f: "#0f0", t: "#4f4", s: "#0a0", b: "#8f8" }  
     ];
 
-    // Car Variety Blueprints
     const V_DIMS = {
         player:    { w: 45, hB: 18, hC: 14, lB: 100, lC: 45, zOff: 25 },
         speedster: { w: 35, hB: 14, hC: 10, lB: 90,  lC: 40, zOff: 20 },
@@ -325,7 +325,6 @@
         if(id) document.getElementById(id).classList.remove('hidden'); 
     };
 
-    // Controls
     let gasBtnHeld = false;
     function bindTouch(btnId, keyCodes) {
         const btn = document.getElementById(btnId);
@@ -350,7 +349,6 @@
     bindTouch('btn-gas', ['ArrowUp', 'KeyW']);
     bindTouch('btn-brake', ['ArrowDown', 'KeyS']);
 
-    // ID-09: Mobile Nitro Auto-Gas
     const nitroBtn = document.getElementById('btn-nitro');
     nitroBtn.addEventListener('touchstart', (e) => { 
         e.preventDefault(); 
@@ -366,7 +364,6 @@
     window.onkeydown = e => { keys[e.code] = true; };
     window.onkeyup = e => { keys[e.code] = false; };
 
-    // --- NETWORKING ---
     window.hostRoom = (overrideCode = null) => {
         roomPass = document.getElementById('host-pass').value.trim();
         roomCode = overrideCode || Math.random().toString(36).substring(2,7).toUpperCase();
@@ -408,7 +405,6 @@
     };
 
     window.joinRoom = () => {
-        // ID-02: Double-Join Prevention
         const joinBtn = document.getElementById('btn-join-room');
         if (joinBtn.disabled) return;
         joinBtn.disabled = true;
@@ -483,7 +479,6 @@
             }
         }
 
-        // ID-08: Host-Only Start Controls
         const startBtn = document.getElementById('btn-start-race');
         if (isHost && clients.length > 0) {
             startBtn.classList.remove('hidden');
@@ -492,20 +487,20 @@
         }
     }
 
-    // No-Jam Safe Lane Spawning
     window.hostStartRace = () => {
         if (!isHost || clients.length === 0) return;
         traffic = [];
         let types = ['speedster', 'commuter', 'tank'];
         let lastZ = [0, 0, 0]; 
 
-        for (let d = 800; d < 9500; d += 250) {
-            let safeLane = Math.floor(d / 500) % 3; // Golden Lane
+        // Generate traffic out to 12,000m to cover high speeds and increased draw distance
+        for (let d = 800; d < 12000; d += 250) {
+            let safeLane = Math.floor(d / 500) % 3; 
             for (let lane = 0; lane < 3; lane++) {
                 if (lane === safeLane) continue; 
                 
                 if (Math.random() < 0.4) {
-                    if (d - lastZ[lane] > 300) { // 300m Buffer Zone
+                    if (d - lastZ[lane] > 300) { 
                         let type = types[Math.floor(Math.random()*types.length)];
                         let baseSpeed = type === 'speedster' ? 120 + Math.random()*20 : (type === 'tank' ? 50 + Math.random()*10 : 80 + Math.random()*20);
                         
@@ -528,7 +523,7 @@
         const ui = document.getElementById('countdown-ui'); ui.classList.remove('hidden');
         if(isTouchDevice) document.getElementById('mobile-controls').classList.remove('hidden');
 
-        p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; raceFinished = false; crossTriggered = false;
+        p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; raceFinished = false; crossTriggered = false; p1.camZoom = 0.55;
         let count = 3; ui.innerText = count;
         let t = setInterval(() => { 
             count--; 
@@ -541,7 +536,6 @@
         }, 1000);
     }
 
-    // ID-03: Global Win Sync
     function triggerGlobalFinish() {
         if (raceFinished) return;
         raceFinished = true;
@@ -565,17 +559,16 @@
         pb.classList.remove('hidden');
         pb.innerHTML = '';
         
-        // Opponent Pips
         clients.forEach(c => {
             let pct = Math.max(0, Math.min(100, (c.dist / TOTAL_DIST) * 100));
             pb.innerHTML += `<div class="prog-pip" style="left: calc(${pct}% - 10px); background: ${COLORS[c.colIdx % COLORS.length].f}; z-index: 51;"></div>`;
         });
-        // My Pip
+        
         let myPct = Math.max(0, Math.min(100, (p1.dist / TOTAL_DIST) * 100));
         pb.innerHTML += `<div class="prog-pip" style="left: calc(${myPct}% - 10px); background: ${COLORS[p1.colIdx % COLORS.length].f}; z-index: 52; border-color: #00ffcc;"></div>`;
     }
 
-    // Physics Engine Update
+    // High-Speed Physics Update
     function update(dt) {
         let steerSpeed = 4.5; 
         if(keys['KeyA'] || keys['ArrowLeft']) p1.lane -= steerSpeed * dt;
@@ -586,36 +579,34 @@
         p1.isBraking = keys['KeyS'] || keys['ArrowDown'];
         let gasPressed = keys['KeyW'] || keys['ArrowUp'];
         
-        // Brake Override & Nitro Floor Fix
+        // 2X Speed & Nitro Logic Buffs
         if (p1.isBraking) {
             p1.turboActive = false;
-            p1.speed = Math.max(0, p1.speed - 400 * dt); 
+            p1.speed = Math.max(0, p1.speed - 800 * dt); // 2x Braking Power
         } else {
             if (keys['ShiftLeft'] && p1.speed > 80 && p1.nitro > 0) {
                 if (!p1.turboActive && p1.nitro > 20) { p1.turboActive = true; } 
-                // else keep previous state (on or off)
             } else {
                 p1.turboActive = false;
             }
 
             if (p1.turboActive) {
-                p1.nitro -= 33 * dt;
+                p1.nitro -= 16.5 * dt; // 2x Duration (slower burn)
                 if (p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; }
             } else {
                 if (p1.nitro < 100) p1.nitro += 15 * dt;
             }
 
             if (gasPressed) {
-                let targetSpeed = p1.turboActive ? 320 : 180;
-                p1.speed = Math.min(targetSpeed, p1.speed + 150 * dt);
+                let targetSpeed = p1.turboActive ? 640 : 360; // 2x Target Speeds
+                p1.speed = Math.min(targetSpeed, p1.speed + 300 * dt); // 2x Thrust
             } else {
-                p1.speed = Math.max(0, p1.speed - 40 * dt); 
+                p1.speed = Math.max(0, p1.speed - 80 * dt); // Coasting friction
             }
         }
 
         p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
 
-        // Update Nitro HUD
         let nitroFill = document.getElementById('nitro-fill');
         nitroFill.style.width = p1.nitro + "%";
         if (!p1.turboActive && p1.nitro < 20) {
@@ -627,19 +618,20 @@
         traffic.forEach(t => {
             if(isHost) {
                 t.d += ((t.s * 0.277 * 4.0) * dt); 
-                // AI Anti-Tailgate Overlap Fix
                 let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250);
                 if (carAhead && t.s > carAhead.s) { t.s = Math.max(0, t.s - 100 * dt); } 
             }
             let lBound = V_DIMS[t.type].lB;
-            if(Math.abs(p1.dist - t.d) < (lBound * 0.6) && Math.abs(p1.lane - t.l) < 0.40 && !p1.dead) {
+            
+            // Speed-Padded Collision Check to prevent jumping through cars
+            let hitZ = (lBound * 0.6) + (p1.speed * dt * 0.2); 
+            if(Math.abs(p1.dist - t.d) < hitZ && Math.abs(p1.lane - t.l) < 0.40 && !p1.dead) {
                 p1.dead = true;
                 if(!isHost) hostConnToLobby.send({type: 'sync', dist: p1.dist, lane: p1.lane, speed: 0, dead: true, isBraking: false});
                 endGame("WRECKED!", false, 0, 0);
             }
         });
 
-        // Instant Result Pending Visual Fix
         if(p1.dist >= TOTAL_DIST && !p1.dead && !crossTriggered) {
             crossTriggered = true;
             p1.speed = 0; 
@@ -688,7 +680,10 @@
         
         ctx.fillStyle = "#111"; ctx.fillRect(0, horizon, w, h-horizon); 
 
-        let focalLength = p1.turboActive ? h * 0.35 : h * 0.55; 
+        // Smooth Camera Interpolation for Hyper-Speed
+        let targetZoom = p1.turboActive ? 0.35 : 0.55;
+        p1.camZoom += (targetZoom - p1.camZoom) * 4 * (0.016); // fixed timestep for smooth lerp
+        let focalLength = h * p1.camZoom; 
 
         function project(worldX, worldY, worldZ) {
             let dz = worldZ - p1.dist;
@@ -698,8 +693,9 @@
             return { x: w/2 + (worldX - camX)*scale, y: horizon + (worldY + 120)*scale, s: scale };
         }
 
+        // Expanded Draw Distance for high speeds (3500m)
         let r1 = project(-300, 0, p1.dist - 50); let r2 = project(300, 0, p1.dist - 50);
-        let r3 = project(300, 0, p1.dist + 1800); let r4 = project(-300, 0, p1.dist + 1800);
+        let r3 = project(300, 0, p1.dist + 3500); let r4 = project(-300, 0, p1.dist + 3500);
         if(r1 && r3) {
             ctx.fillStyle = "#222"; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.lineTo(r4.x, horizon); ctx.fill();
             ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r4.x, horizon); ctx.stroke(); ctx.beginPath(); ctx.moveTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.stroke();
@@ -707,7 +703,7 @@
 
         let totalCycle = 40; 
         ctx.fillStyle = "#fff";
-        for(let z = Math.floor(p1.dist/totalCycle)*totalCycle; z < p1.dist + 1800; z += totalCycle) {
+        for(let z = Math.floor(p1.dist/totalCycle)*totalCycle; z < p1.dist + 3500; z += totalCycle) {
             let pL1 = project(-100, 0, z); let pL2 = project(-100, 0, z + 20);
             let pR1 = project(100, 0, z); let pR2 = project(100, 0, z + 20);
             if (pL1 && pL2 && pL1.y > horizon) {
@@ -740,17 +736,16 @@
             return { bTL, bTR, bBL, bBR }; 
         }
 
-        let q = traffic.filter(t => t.d > p1.dist - 100 && t.d < p1.dist + 1800).map(t => ({...t, isOpp: false}));
+        let q = traffic.filter(t => t.d > p1.dist - 100 && t.d < p1.dist + 3500).map(t => ({...t, isOpp: false}));
         
         clients.forEach(c => {
-            if(c.id !== myPeerId && !c.dead && c.dist > p1.dist - 100 && c.dist < p1.dist + 1800) {
+            if(c.id !== myPeerId && !c.dead && c.dist > p1.dist - 100 && c.dist < p1.dist + 3500) {
                 q.push({d: c.dist, l: c.lane, type: 'player', col: COLORS[c.colIdx % COLORS.length], isOpp: true, name: c.name, brake: c.isBraking});
             }
         });
         
         if(!p1.dead) q.push({d: p1.dist, l: p1.lane, type: 'player', col: COLORS[p1.colIdx % COLORS.length], isOpp: false, isMe: true, brake: p1.isBraking}); 
         
-        // Z-Index Flicker Fix applied in sort
         q.sort((a,b) => (b.d - a.d) || (b.l - a.l)).forEach(obj => {
             let worldX = (obj.l - 1) * 150;
             let dims = V_DIMS[obj.type];
@@ -782,13 +777,14 @@
             }
         });
 
-        if(p1.speed > 160) {
+        // Expanded speed lines for 640 KM/H
+        if(p1.speed > 250) {
             ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = p1.turboActive ? 3 : 1;
             let cx = w/2, cy = horizon;
-            for(let i=0; i < (p1.turboActive ? 30 : 15); i++) {
+            for(let i=0; i < (p1.turboActive ? 40 : 20); i++) {
                 let angle = Math.random() * Math.PI * 2;
                 let dist = 60 + Math.random() * (h/2); 
-                let length = (p1.speed/3) + Math.random()*80;
+                let length = (p1.speed/3) + Math.random()*100;
                 let sx = cx + Math.cos(angle)*dist;
                 let sy = cy + Math.sin(angle)*dist;
                 ctx.beginPath(); ctx.moveTo(sx, sy); 
@@ -811,7 +807,6 @@
     }
     requestAnimationFrame(loop);
 
-    // ID-05: Canvas Confetti Logic
     function fireConfetti() {
         let duration = 3000;
         let end = Date.now() + duration;
@@ -836,7 +831,6 @@
         }());
     }
 
-    // ID-04 & 06: Final EndGame Hook
     window.endGame = function(msg, win, rank = 0, totalPlayers = 0) {
         if(gameState === 'END') return;
         gameState = 'END';
