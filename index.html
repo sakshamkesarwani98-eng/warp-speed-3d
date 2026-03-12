@@ -148,8 +148,10 @@
 
         #countdown-ui { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 15rem; z-index: 25; font-weight: bold; pointer-events: none; text-shadow: 8px 8px 0 rgba(0,0,0,0.5); color: #fff; }
         
-        #spectator-ui { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 45; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; border: 2px solid #ff4444; width: 90%; max-width: 400px; }
-        .spec-btn { background: #333; color: #fff; border: 2px solid #fff; padding: 10px 20px; font-weight: bold; border-radius: 5px; cursor: pointer; }
+        /* Compact Bottom-Right Spectator Hub */
+        #spectator-ui { position: absolute; bottom: 20px; right: 20px; text-align: center; z-index: 45; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; border: 2px solid #ff4444; width: 180px; box-shadow: 0 0 10px rgba(255,0,0,0.5); }
+        .spec-btn { background: #222; color: #fff; border: 1px solid #777; padding: 8px; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 45%; }
+        .spec-btn:active { background: #555; }
     </style>
 </head>
 <body>
@@ -170,11 +172,11 @@
     </div>
 
     <div id="spectator-ui" class="hidden">
-        <div style="color:#ff4444; font-size:1.5rem; margin-bottom: 5px;">WRECKED!</div>
-        <div style="font-size:1.2rem; color:#fff; margin-bottom: 15px;">SPECTATING: <span id="spec-name" style="color:#00ffcc;">---</span></div>
+        <div style="color:#ff4444; font-size:1rem; margin-bottom: 5px; font-weight:bold;">WRECKED!</div>
+        <div style="font-size:0.8rem; color:#fff; margin-bottom: 10px;">WATCHING:<br><span id="spec-name" style="color:#00ffcc; font-size: 1.1rem;">---</span></div>
         <div style="display: flex; justify-content: space-between;">
-            <button class="spec-btn" onclick="window.specPrev()">◀ PREV</button>
-            <button class="spec-btn" onclick="window.specNext()">NEXT ▶</button>
+            <button class="spec-btn" onclick="window.specPrev()">◀</button>
+            <button class="spec-btn" onclick="window.specNext()">▶</button>
         </div>
     </div>
 
@@ -547,7 +549,6 @@
         if (totalAlive === 0) {
             triggerGlobalFinish("ALL RACERS WRECKED!");
         } else if (totalPlayers >= 2 && totalAlive === 1 && totalFinished === 0) {
-            // ID-10: Sole Survivor Win Logic
             if (myAlive) p1.dist = TOTAL_DIST;
             else aliveClients[0].dist = TOTAL_DIST;
             triggerGlobalFinish("SOLE SURVIVOR! ALL OTHERS WRECKED.");
@@ -587,14 +588,12 @@
         pb.innerHTML += `<div class="prog-pip" style="left: calc(${myPct}% - 10px); background: ${COLORS[p1.colIdx % COLORS.length].f}; z-index: 52; border-color: #00ffcc;"></div>`;
     }
 
-    // Handles the local wreck sequence
     function localWreck() {
         p1.dead = true;
         document.getElementById('mobile-controls').classList.add('hidden');
         document.getElementById('spectator-ui').classList.remove('hidden');
         if(!isHost) hostConnToLobby.send({type: 'sync', dist: p1.dist, lane: p1.lane, speed: 0, dead: true, isBraking: false});
         
-        // Assign first alive target to spectate
         let alive = clients.filter(c => !c.dead);
         if(alive.length > 0) window.spectatingId = alive[0].id;
     }
@@ -652,7 +651,7 @@
                 document.getElementById('hud-speed').innerText = "FINISH";
             }
         } else {
-            // Spectator Camera Lerp Logic
+            // Spectator Camera Lerp
             let target = clients.find(c => c.id === window.spectatingId);
             if (target && !target.dead) {
                 p1.camLane += (target.lane - p1.camLane) * 8 * dt;
@@ -678,7 +677,7 @@
                 let safeClients = clients.map(c => ({ id: c.id, name: c.name, dist: c.dist, lane: c.lane, speed: c.speed, dead: c.dead, isBraking: c.isBraking, colIdx: c.colIdx, finishTime: c.finishTime }));
                 safeClients.push({ id: myPeerId, name: window.playerName, dist: p1.dist, lane: p1.lane, speed: p1.speed, dead: p1.dead, isBraking: p1.isBraking, colIdx: p1.colIdx, finishTime: p1.finishTime }); 
                 clients.forEach(c => c.conn.send({type: 'game_sync', clients: safeClients, traffic: traffic}));
-                checkRaceState(); // Host dictates global finish rules
+                checkRaceState(); 
             } else {
                 hostConnToLobby.send({type: 'sync', dist: p1.dist, lane: p1.lane, speed: p1.speed, dead: p1.dead, isBraking: p1.isBraking});
             }
@@ -696,8 +695,9 @@
         ctx.fillStyle = skyGrad; ctx.fillRect(0,0,w,h);
         ctx.fillStyle = "#111"; ctx.fillRect(0, horizon, w, h-horizon); 
 
-        // Establish View State (Self or Spectating)
         let viewState = { dist: p1.dist, camLane: p1.camLane, camZoom: p1.camZoom, speed: p1.speed, turbo: p1.turboActive };
+        
+        // Spectator target HUD sync
         if (p1.dead && window.spectatingId) {
             let target = clients.find(c => c.id === window.spectatingId);
             if (target) {
@@ -762,14 +762,12 @@
         
         clients.forEach(c => {
             if(!c.dead && c.dist > viewState.dist - 100 && c.dist < viewState.dist + 3500) {
-                // Don't render the person we are spectating (since we are in their camera)
                 if (c.id !== window.spectatingId) {
                     q.push({d: c.dist, l: c.lane, type: 'player', col: COLORS[c.colIdx % COLORS.length], isOpp: true, name: c.name, brake: c.isBraking});
                 }
             }
         });
         
-        // Render ourselves if we are alive
         if(!p1.dead) q.push({d: p1.dist, l: p1.lane, type: 'player', col: COLORS[p1.colIdx % COLORS.length], isOpp: false, isMe: true, brake: p1.isBraking}); 
         
         q.sort((a,b) => (b.d - a.d) || (b.l - a.l)).forEach(obj => {
