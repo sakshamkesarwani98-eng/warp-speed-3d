@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="google-site-verification" content="BkvITP5H4awm1v8aifFwN-7He9Pa7pvNV0RQoSBZ2NU" />
@@ -487,8 +488,9 @@
                 if (window.isHost) {
                     ui.classList.add('hidden');
                     traffic = []; let types = ['speedster', 'commuter', 'tank']; let lastZ = [0, 0, 0]; 
-                    for (let d = 800; d < TOTAL_DIST + 2000; d += 250) {
+                    for (let d = 800; d < TOTAL_DIST + 8000; d += 250) {
                         let safeLane = Math.floor(d / 500) % 3; 
+
                         for (let lane = 0; lane < 3; lane++) {
                             if (lane === safeLane) continue; 
                             if (Math.random() < 0.4 && (d - lastZ[lane] > 300)) { 
@@ -599,7 +601,6 @@
                     p1.speed = 900; p1.nitro = 100;
                 }
             }
-            p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
 
             traffic.forEach(t => {
                 if(window.isHost) { t.d += ((t.s * 0.277 * 4.0) * dt); let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250); if (carAhead && t.s > carAhead.s) t.s = Math.max(0, t.s - 100 * dt); }
