@@ -571,7 +571,16 @@
                 if (p1.turboActive) { p1.nitro -= 16.5 * dt; if (p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; } } else if (p1.nitro < 100) p1.nitro += 15 * dt;
                 if (gasPressed) p1.speed = Math.min(p1.turboActive ? 640 : 360, p1.speed + 300 * dt); else p1.speed = Math.max(0, p1.speed - 80 * dt);
             }
+            let prevDist = p1.dist;
             p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
+
+            // --- NEON BOOST PAD LOGIC ---
+            let padSpacing = 1500;
+            if (Math.floor(p1.dist / padSpacing) > Math.floor(prevDist / padSpacing) && p1.dist < TOTAL_DIST) {
+                p1.speed = 900; // Superluminal speed!
+                p1.nitro = 100; // Instantly refill nitro tank
+            }
+            // ---------------------------- 
 
             traffic.forEach(t => {
                 if(window.isHost) { t.d += ((t.s * 0.277 * 4.0) * dt); let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250); if (carAhead && t.s > carAhead.s) t.s = Math.max(0, t.s - 100 * dt); }
@@ -613,8 +622,9 @@
     function draw() {
         let w = canvas.width, h = canvas.height; ctx.save();
         let horizon = h * 0.45; let skyGrad = ctx.createLinearGradient(0, 0, 0, horizon);
-        skyGrad.addColorStop(0, "#0a0a2a"); skyGrad.addColorStop(1, "#3a1c71"); 
-        ctx.fillStyle = skyGrad; ctx.fillRect(0,0,w,h); ctx.fillStyle = "#111"; ctx.fillRect(0, horizon, w, h-horizon); 
+        skyGrad.addColorStop(0, "#000000"); skyGrad.addColorStop(1, "#0a001a"); 
+        ctx.fillStyle = skyGrad; ctx.fillRect(0,0,w,h); 
+        ctx.fillStyle = "#050011"; ctx.fillRect(0, horizon, w, h-horizon); 
 
         let viewState = { dist: p1.dist, camLane: p1.camLane, camZoom: p1.camZoom, speed: p1.speed, turbo: p1.turboActive };
         
@@ -689,13 +699,24 @@
         }
 
         // --- UPDATED RENDER QUEUE ---
-        let q = traffic.filter(t => t.d > viewState.dist - 100 && t.d < viewState.dist + 3500).map(t => ({...t, isOpp: false}));
+       let q = traffic.filter(t => t.d > viewState.dist - 100 && t.d < viewState.dist + 3500).map(t => ({...t, isOpp: false}));
         clients.forEach(c => { if(!c.dead && c.dist > viewState.dist - 100 && c.dist < viewState.dist + 3500 && c.id !== window.spectatingId) q.push({d: c.dist, l: c.lane, type: 'player', col: COLORS[c.colIdx % COLORS.length], isOpp: true, name: c.name, brake: c.isBraking}); });
         if(!p1.dead) q.push({d: p1.dist, l: p1.lane, type: 'player', col: COLORS[p1.colIdx % COLORS.length], isOpp: false, isMe: true, brake: p1.isBraking}); 
         
         if (TOTAL_DIST > viewState.dist - 100 && TOTAL_DIST < viewState.dist + 3500) {
             q.push({ d: TOTAL_DIST, l: 1, type: 'finish_line' });
         }
+
+        // --- NEON CYBER TUNNEL ADDITIONS ---
+        let ribSpacing = 200;
+        for(let z = Math.floor(viewState.dist/ribSpacing)*ribSpacing; z < viewState.dist + 3500; z += ribSpacing) {
+            if (z > viewState.dist) q.push({ d: z, l: 1, type: 'neon_rib' });
+        }
+        let padSpacing = 1500;
+        for(let z = Math.floor(viewState.dist/padSpacing)*padSpacing; z < viewState.dist + 3500; z += padSpacing) {
+            if (z > viewState.dist && z < TOTAL_DIST) q.push({ d: z, l: 1, type: 'boost_pad' });
+        }
+        // -----------------------------------
         
         q.sort((a,b) => (b.d - a.d) || (b.l - a.l)).forEach(obj => {
             if (obj.type === 'finish_line') {
@@ -703,6 +724,19 @@
                 return;
             }
 
+            // --- NEON CYBER TUNNEL RENDERING ---
+            if (obj.type === 'neon_rib') {
+                let c = {f: "#00f0ff", t: "#00aaff", s: "#004488", b: "#001122"}; // Cyan
+                draw3DBox(-350, obj.d, 20, 400, 20, c, 0); // Left pillar
+                draw3DBox(350, obj.d, 20, 400, 20, c, 0);  // Right pillar
+                draw3DBox(0, obj.d, 720, 20, 20, c, 380);  // Ceiling beam
+                return;
+            }
+            if (obj.type === 'boost_pad') { // Magenta Speed Pad
+                draw3DBox(0, obj.d, 400, 2, 80, {f: "#ff00ff", t: "#ff00ff", s: "#aa00aa", b: "#550055"}, 0);
+                return;
+            }
+            // -----------------------------------
             let worldX = (obj.l - 1) * 150; let dims = V_DIMS[obj.type]; 
             let backFace = draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0); 
             draw3DBox(worldX, obj.d + dims.zOff, dims.w * 0.8, dims.hC, dims.lC, {f: "#111", t: "#222", s: "#0a0a0a", b: "#151515"}, dims.hB);
