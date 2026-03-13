@@ -105,11 +105,13 @@
                         // Verify room is open, has space, and heartbeat is fresh (30s)
                         if (snap.exists() && snap.data().status === "OPEN" && snap.data().playerCount < 10 && (now - snap.data().timestamp < 30000)) {
                             targetCode = snap.data().code;
+                            window.activeTrack = snap.data().trackId || 0;
                             transaction.update(publicRef, { playerCount: snap.data().playerCount + 1, timestamp: now });
                         } else {
                             targetCode = "PUB" + Math.random().toString(36).substring(2,6).toUpperCase();
                             isCreating = true;
-                            transaction.set(publicRef, { code: targetCode, timestamp: now, playerCount: 1, status: "OPEN" });
+                            window.activeTrack = Math.floor(Math.random() * TRACKS.length);
+                            transaction.set(publicRef, { code: targetCode, timestamp: now, playerCount: 1, status: "OPEN", trackId: window.activeTrack });
                         }
                     });
                     success = true;
@@ -195,7 +197,7 @@
     <div id="hud-player-name"></div>
     <div id="hud" class="hidden">
         <div><span class="hud-label">SPEED</span> <br><span id="hud-speed">0</span> KM/H</div>
-        <div style="margin-top:10px;"><span class="hud-label">DISTANCE</span> <br><span id="hud-dist">0</span> / 20000M</div>
+        <div style="margin-top:10px;"><span class="hud-label">DISTANCE</span> <br><span id="hud-dist">0</span> / 10000M</div>
         <div style="margin-top:20px;" class="hud-label">NITROUS</div>
         <div id="nitro-container"><div id="nitro-fill"></div></div>
     </div>
@@ -231,6 +233,10 @@
     <div id="screen-host-setup" class="screen hidden">
         <h2>PRIVATE ROOM</h2>
         <input type="text" id="host-pass" placeholder="OPTIONAL PASSWORD">
+        <select id="host-track-select" style="padding: 15px; font-size: 1.2rem; text-align: center; border: 4px solid #fff; background: #222; color: #00ffcc; margin-bottom: 10px; border-radius: 4px; width: 300px; text-transform: uppercase;">
+            <option value="0">CLASSIC HIGHWAY</option>
+            <option value="1">NEON CYBER TUNNEL</option>
+        </select>
         <button class="btn btn-main" onclick="window.hostRoom(null, true)">CREATE LOBBY</button>
         <button class="btn" onclick="window.showScreen('screen-menu')">BACK</button>
     </div>
@@ -264,7 +270,12 @@
     // --- UTILITIES & SETUP ---
     window.toggleFS = () => { if (!document.fullscreenElement) { document.documentElement.requestFullscreen(); document.getElementById('global-fs-btn').innerText = "✕ EXIT"; } else { document.exitFullscreen(); document.getElementById('global-fs-btn').innerText = "⛶ FULLSCREEN"; } };
     const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-    const TOTAL_DIST = 20000; const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    let TOTAL_DIST = 10000; const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    window.activeTrack = 0;
+    const TRACKS = [
+        { id: 0, name: "CLASSIC HIGHWAY", dist: 10000, skyTop: "#0a0a2a", skyBot: "#3a1c71", ground: "#111", hasBoost: false },
+        { id: 1, name: "NEON CYBER TUNNEL", dist: 20000, skyTop: "#000000", skyBot: "#0a001a", ground: "#050011", hasBoost: true }
+    ];
 
     let peer = null, roomCode = "", roomPass = "", myPeerId = "";
     let clients = [], hostConnToLobby = null, raceFinished = false, crossTriggered = false; 
@@ -315,6 +326,8 @@
     window.forceHostStart = () => { if (window.isPrivateRoom && window.isHost) triggerIgnition(); };
 
     window.hostRoom = (overrideCode = null, isPrivate = false) => {
+        if (isPrivate) window.activeTrack = parseInt(document.getElementById('host-track-select').value);
+        TOTAL_DIST = TRACKS[window.activeTrack].dist;
         window.isPrivateRoom = isPrivate; roomPass = isPrivate ? document.getElementById('host-pass').value.trim() : "";
         roomCode = overrideCode || Math.random().toString(36).substring(2,7).toUpperCase();
         
@@ -351,7 +364,7 @@
                         clients = clients.filter(c => c.name !== data.name);
                         
                         clients.push({ conn: conn, id: conn.peer, name: data.name, dist: 0, lane: 1, speed: 0, dead: false, isBraking: false, colIdx: clients.length + 1, finishTime: 999999999, lastSeen: Date.now(), isReady: false });
-                        try { conn.send({type: 'accepted', colIdx: clients.length, isPrivate: window.isPrivateRoom}); } catch(e){}
+                        try { conn.send({type: 'accepted', colIdx: clients.length, isPrivate: window.isPrivateRoom, trackId: window.activeTrack}); } catch(e){}
                         if(!window.isPrivateRoom) checkPublicStartConditions(); broadcastLobbyState();
                     }
                     let c = clients.find(cl => cl.id === conn.peer);
@@ -398,8 +411,7 @@
                 });
                 
                 hostConnToLobby.on('data', data => {
-                    if(data.type === 'rejected') { alert(data.msg); if(isAutoFailover) { window.leaveLobby(); window.hostRoom(roomCode, false); } else window.leaveLobby(); }
-                    if(data.type === 'accepted') { window.gameState = 'LOBBY'; p1.colIdx = data.colIdx; window.isPrivateRoom = data.isPrivate; window.showScreen('screen-lobby'); applyLobbyUIMode(); updateReadyButtonUI(); document.getElementById('lobby-code-display').innerText = "ROOM: " + roomCode; }
+                    if(data.type === 'rejected') { alert(data.msg); if(isAutoFailover) { window.leaveLobby(); window.hostRoom(roomCode, false); } else window.leaveLobby(); }if(data.type === 'accepted') { window.gameState = 'LOBBY'; p1.colIdx = data.colIdx; window.isPrivateRoom = data.isPrivate; window.activeTrack = data.trackId || 0; TOTAL_DIST = TRACKS[window.activeTrack].dist; window.showScreen('screen-lobby'); applyLobbyUIMode(); updateReadyButtonUI(); document.getElementById('lobby-code-display').innerText = "ROOM: " + roomCode; }
                     
                     if(data.type === 'lobby_state') { 
                         if (window.gameState !== 'LOBBY') return;
@@ -475,7 +487,7 @@
                 if (window.isHost) {
                     ui.classList.add('hidden');
                     traffic = []; let types = ['speedster', 'commuter', 'tank']; let lastZ = [0, 0, 0]; 
-                    for (let d = 800; d < 12000; d += 250) {
+                    for (let d = 800; d < TOTAL_DIST + 2000; d += 250) {
                         let safeLane = Math.floor(d / 500) % 3; 
                         for (let lane = 0; lane < 3; lane++) {
                             if (lane === safeLane) continue; 
@@ -506,6 +518,7 @@
         window.gameState = 'RACE'; p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; raceFinished = false; crossTriggered = false; p1.camZoom = 0.55; p1.finishTime = 999999999;
         if(isTouchDevice) document.getElementById('mobile-controls').classList.remove('hidden');
         document.getElementById('hud').classList.remove('hidden'); window.spectatingId = null;
+        document.getElementById('hud-dist').parentElement.innerHTML = '<span class="hud-label">DISTANCE</span> <br><span id="hud-dist">0</span> / ' + TOTAL_DIST + 'M';
     }
 
     function updateLobbyUI() {
@@ -569,22 +582,24 @@
             else {
                 if (keys['ShiftLeft'] && p1.speed > 80 && p1.nitro > 0) { if (!p1.turboActive && p1.nitro > 20) p1.turboActive = true; } else p1.turboActive = false;
                 if (p1.turboActive) { p1.nitro -= 16.5 * dt; if (p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; } } else if (p1.nitro < 100) p1.nitro += 15 * dt;
+                
                 let topSpeed = p1.turboActive ? 640 : 360;
                 if (gasPressed) {
                     if (p1.speed <= topSpeed) p1.speed = Math.min(topSpeed, p1.speed + 300 * dt);
-                    else p1.speed = Math.max(topSpeed, p1.speed - 150 * dt); // Smoothly glide down from 900 KM/H
+                    else p1.speed = Math.max(topSpeed, p1.speed - 150 * dt);
                 } else p1.speed = Math.max(0, p1.speed - 80 * dt);
             }
+            
             let prevDist = p1.dist;
             p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
-
-            // --- NEON BOOST PAD LOGIC ---
-            let padSpacing = 2000;
-            if (Math.floor(p1.dist / padSpacing) > Math.floor(prevDist / padSpacing) && p1.dist < TOTAL_DIST) {
-                p1.speed = 900; // Superluminal speed!
-                p1.nitro = 100; // Instantly refill nitro tank
+            
+            if (TRACKS[window.activeTrack].hasBoost) {
+                let padSpacing = 2000;
+                if (Math.floor(p1.dist / padSpacing) > Math.floor(prevDist / padSpacing) && p1.dist < TOTAL_DIST) {
+                    p1.speed = 900; p1.nitro = 100;
+                }
             }
-            // ---------------------------- 
+            p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
 
             traffic.forEach(t => {
                 if(window.isHost) { t.d += ((t.s * 0.277 * 4.0) * dt); let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250); if (carAhead && t.s > carAhead.s) t.s = Math.max(0, t.s - 100 * dt); }
@@ -626,9 +641,9 @@
     function draw() {
         let w = canvas.width, h = canvas.height; ctx.save();
         let horizon = h * 0.45; let skyGrad = ctx.createLinearGradient(0, 0, 0, horizon);
-        skyGrad.addColorStop(0, "#000000"); skyGrad.addColorStop(1, "#0a001a"); 
-        ctx.fillStyle = skyGrad; ctx.fillRect(0,0,w,h); 
-        ctx.fillStyle = "#050011"; ctx.fillRect(0, horizon, w, h-horizon); 
+        let tData = TRACKS[window.activeTrack];
+        skyGrad.addColorStop(0, tData.skyTop); skyGrad.addColorStop(1, tData.skyBot); 
+        ctx.fillStyle = skyGrad; ctx.fillRect(0,0,w,h); ctx.fillStyle = tData.ground; ctx.fillRect(0, horizon, w, h-horizon); 
 
         let viewState = { dist: p1.dist, camLane: p1.camLane, camZoom: p1.camZoom, speed: p1.speed, turbo: p1.turboActive };
         
@@ -703,7 +718,7 @@
         }
 
         // --- UPDATED RENDER QUEUE ---
-       let q = traffic.filter(t => t.d > viewState.dist - 100 && t.d < viewState.dist + 3500).map(t => ({...t, isOpp: false}));
+        let q = traffic.filter(t => t.d > viewState.dist - 100 && t.d < viewState.dist + 3500).map(t => ({...t, isOpp: false}));
         clients.forEach(c => { if(!c.dead && c.dist > viewState.dist - 100 && c.dist < viewState.dist + 3500 && c.id !== window.spectatingId) q.push({d: c.dist, l: c.lane, type: 'player', col: COLORS[c.colIdx % COLORS.length], isOpp: true, name: c.name, brake: c.isBraking}); });
         if(!p1.dead) q.push({d: p1.dist, l: p1.lane, type: 'player', col: COLORS[p1.colIdx % COLORS.length], isOpp: false, isMe: true, brake: p1.isBraking}); 
         
@@ -711,36 +726,32 @@
             q.push({ d: TOTAL_DIST, l: 1, type: 'finish_line' });
         }
 
-        // --- NEON CYBER TUNNEL ADDITIONS ---
-        let ribSpacing = 200;
-        for(let z = Math.floor(viewState.dist/ribSpacing)*ribSpacing; z < viewState.dist + 3500; z += ribSpacing) {
-            if (z > viewState.dist) q.push({ d: z, l: 1, type: 'neon_rib' });
+        if (tData.hasBoost) {
+            let ribSpacing = 200;
+            for(let z = Math.floor(viewState.dist/ribSpacing)*ribSpacing; z < viewState.dist + 3500; z += ribSpacing) {
+                if (z > viewState.dist) q.push({ d: z, l: 1, type: 'neon_rib' });
+            }
+            let padSpacing = 2000;
+            for(let z = Math.floor(viewState.dist/padSpacing)*padSpacing; z < viewState.dist + 3500; z += padSpacing) {
+                if (z > viewState.dist && z < TOTAL_DIST) q.push({ d: z, l: 1, type: 'boost_pad' });
+            }
         }
-        let padSpacing = 1500;
-        for(let z = Math.floor(viewState.dist/padSpacing)*padSpacing; z < viewState.dist + 3500; z += padSpacing) {
-            if (z > viewState.dist && z < TOTAL_DIST) q.push({ d: z, l: 1, type: 'boost_pad' });
-        }
-        // -----------------------------------
         
         q.sort((a,b) => (b.d - a.d) || (b.l - a.l)).forEach(obj => {
             if (obj.type === 'finish_line') {
                 drawFinishArch(TOTAL_DIST);
                 return;
             }
-
-            // --- NEON CYBER TUNNEL RENDERING ---
             if (obj.type === 'neon_rib') {
-                let c = {f: "#00f0ff", t: "#00aaff", s: "#004488", b: "#001122"}; // Cyan
-                draw3DBox(-350, obj.d, 20, 400, 20, c, 0); // Left pillar
-                draw3DBox(350, obj.d, 20, 400, 20, c, 0);  // Right pillar
-                draw3DBox(0, obj.d, 720, 20, 20, c, 380);  // Ceiling beam
+                let c = {f: "#00f0ff", t: "#00aaff", s: "#004488", b: "#001122"}; 
+                draw3DBox(-350, obj.d, 20, 400, 20, c, 0); draw3DBox(350, obj.d, 20, 400, 20, c, 0); draw3DBox(0, obj.d, 720, 20, 20, c, 380);  
                 return;
             }
-            if (obj.type === 'boost_pad') { // Magenta Speed Pad
+            if (obj.type === 'boost_pad') { 
                 draw3DBox(0, obj.d, 400, 2, 80, {f: "#ff00ff", t: "#ff00ff", s: "#aa00aa", b: "#550055"}, 0);
                 return;
             }
-            // -----------------------------------
+
             let worldX = (obj.l - 1) * 150; let dims = V_DIMS[obj.type]; 
             let backFace = draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0); 
             draw3DBox(worldX, obj.d + dims.zOff, dims.w * 0.8, dims.hC, dims.lC, {f: "#111", t: "#222", s: "#0a0a0a", b: "#151515"}, dims.hB);
