@@ -656,12 +656,57 @@
             ctx.fillStyle = c.b; ctx.beginPath(); ctx.moveTo(bTL.x, bTL.y); ctx.lineTo(bTR.x, bTR.y); ctx.lineTo(bBR.x, bBR.y); ctx.lineTo(bBL.x, bBL.y); ctx.fill(); return { bTL, bTR, bBL, bBR }; 
         }
 
+       // --- NEW FINISH LINE FUNCTION ---
+        function drawFinishArch(z) {
+            const roadWidth = 600; 
+            const archHeight = 250;
+            const pillarWidth = 40;
+            const bannerDepth = 20;
+
+            draw3DBox(-roadWidth/2 - pillarWidth/2, z, pillarWidth, archHeight, 40, {f:"#444", t:"#555", s:"#222", b:"#111"}, 0);
+            draw3DBox(roadWidth/2 + pillarWidth/2, z, pillarWidth, archHeight, 40, {f:"#444", t:"#555", s:"#222", b:"#111"}, 0);
+
+            let banner = draw3DBox(0, z, roadWidth + pillarWidth*2, 60, bannerDepth, {f:"#822", t:"#a33", s:"#611", b:"#b44"}, archHeight - 60);
+
+            if (banner && banner.bTL) {
+                let tw = banner.bTR.x - banner.bTL.x;
+                let th = banner.bBL.y - banner.bTL.y;
+                
+                if (tw > 10) { 
+                    ctx.fillStyle = "white";
+                    ctx.font = `bold ${Math.max(10, th * 0.5)}px 'Arial Black'`;
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText("FINISH", banner.bTL.x + tw/2, banner.bTL.y + th/2);
+                    
+                    let boxSize = th/4;
+                    for(let i=0; i<4; i++) {
+                        ctx.fillRect(banner.bTL.x + (i%2*boxSize), banner.bTL.y + (Math.floor(i/2)*boxSize), boxSize, boxSize);
+                        ctx.fillRect(banner.bTR.x - boxSize*2 + (i%2*boxSize), banner.bTL.y + (Math.floor(i/2)*boxSize), boxSize, boxSize);
+                    }
+                }
+            }
+        }
+
+        // --- UPDATED RENDER QUEUE ---
         let q = traffic.filter(t => t.d > viewState.dist - 100 && t.d < viewState.dist + 3500).map(t => ({...t, isOpp: false}));
         clients.forEach(c => { if(!c.dead && c.dist > viewState.dist - 100 && c.dist < viewState.dist + 3500 && c.id !== window.spectatingId) q.push({d: c.dist, l: c.lane, type: 'player', col: COLORS[c.colIdx % COLORS.length], isOpp: true, name: c.name, brake: c.isBraking}); });
         if(!p1.dead) q.push({d: p1.dist, l: p1.lane, type: 'player', col: COLORS[p1.colIdx % COLORS.length], isOpp: false, isMe: true, brake: p1.isBraking}); 
         
+        if (TOTAL_DIST > viewState.dist - 100 && TOTAL_DIST < viewState.dist + 3500) {
+            q.push({ d: TOTAL_DIST, l: 1, type: 'finish_line' });
+        }
+        
         q.sort((a,b) => (b.d - a.d) || (b.l - a.l)).forEach(obj => {
-            let worldX = (obj.l - 1) * 150; let dims = V_DIMS[obj.type]; let backFace = draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0); draw3DBox(worldX, obj.d + dims.zOff, dims.w * 0.8, dims.hC, dims.lC, {f: "#111", t: "#222", s: "#0a0a0a", b: "#151515"}, dims.hB);
+            if (obj.type === 'finish_line') {
+                drawFinishArch(TOTAL_DIST);
+                return;
+            }
+
+            let worldX = (obj.l - 1) * 150; let dims = V_DIMS[obj.type]; 
+            let backFace = draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0); 
+            draw3DBox(worldX, obj.d + dims.zOff, dims.w * 0.8, dims.hC, dims.lC, {f: "#111", t: "#222", s: "#0a0a0a", b: "#151515"}, dims.hB);
+            
             if (backFace) {
                 let tw = backFace.bTR.x - backFace.bTL.x, th = backFace.bBL.y - backFace.bTL.y; let glow = obj.brake ? 20 : 5;
                 ctx.shadowBlur = glow; ctx.shadowColor = "red"; ctx.fillStyle = obj.brake ? "#ff0000" : "#aa0000";
@@ -673,7 +718,6 @@
                 if (tagP && tagP.y > horizon) { ctx.fillStyle = "#fff"; ctx.font = Math.max(12 * tagP.s, 8) + "px 'Arial Black'"; ctx.textAlign = "center"; ctx.fillText(obj.name, tagP.x, tagP.y - (10*tagP.s)); ctx.fillStyle = "#00ffcc"; ctx.fillText("▼", tagP.x, tagP.y); }
             }
         });
-
         if(viewState.speed > 250) {
             ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = viewState.turbo ? 3 : 1; let cx = w/2, cy = horizon;
             for(let i=0; i < (viewState.turbo ? 40 : 20); i++) {
