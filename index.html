@@ -581,8 +581,7 @@
         if(!window.isHost) { try { hostConnToLobby.send({type: 'sync', dist: p1.dist, lane: p1.lane, speed: 0, dead: true, isBraking: false}); } catch(e){} }
         let alive = clients.filter(c => !c.dead); if(alive.length > 0) window.spectatingId = alive[0].id;
     }
-
-    function update(dt) {
+function update(dt) {
         if (!p1.dead) {
             let steerSpeed = 4.5; 
             if(keys['KeyA'] || keys['ArrowLeft']) p1.lane -= steerSpeed * dt;
@@ -590,9 +589,9 @@
             p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
 
             p1.isBraking = keys['KeyS'] || keys['ArrowDown']; let gasPressed = keys['KeyW'] || keys['ArrowUp'];
-           if (crossTriggered) {
+            
+            if (crossTriggered) {
                 p1.speed = 0;
-                p1.dist = TOTAL_DIST;
                 p1.turboActive = false;
             } else if (p1.isBraking) { 
                 p1.turboActive = false; p1.speed = Math.max(0, p1.speed - 800 * dt); 
@@ -608,12 +607,14 @@
             }
             
             let prevDist = p1.dist;
-            if (!crossTriggered) p1.dist += (p1.speed * 0.277 * 4.0) * dt;
-            
-            if (TRACKS[window.activeTrack].hasBoost) {
-                let padSpacing = 2000;
-                if (Math.floor(p1.dist / padSpacing) > Math.floor(prevDist / padSpacing) && p1.dist < TOTAL_DIST) {
-                    p1.speed = 900; p1.nitro = 100;
+            if (!crossTriggered) {
+                p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
+                
+                if (TRACKS[window.activeTrack].hasBoost) {
+                    let padSpacing = 2000;
+                    if (Math.floor(p1.dist / padSpacing) > Math.floor(prevDist / padSpacing) && p1.dist < TOTAL_DIST) {
+                        p1.speed = 900; p1.nitro = 100;
+                    }
                 }
             }
 
