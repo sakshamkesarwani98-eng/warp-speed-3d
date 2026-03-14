@@ -295,7 +295,6 @@
 
     const COLORS = [ { f: "#b02", t: "#d03", s: "#801", b: "#e04" }, { f: "#15b", t: "#26c", s: "#049", b: "#37d" }, { f: "#182", t: "#293", s: "#061", b: "#3a4" }, { f: "#aa1", t: "#bb2", s: "#880", b: "#cc3" }, { f: "#80d", t: "#91e", s: "#60b", b: "#a2f" }, { f: "#d60", t: "#f80", s: "#a40", b: "#fa2" }, { f: "#199", t: "#2aa", s: "#077", b: "#3bb" }, { f: "#e17", t: "#f28", s: "#c05", b: "#f39" }, { f: "#ddd", t: "#eee", s: "#bbb", b: "#fff" }, { f: "#333", t: "#444", s: "#111", b: "#555" } ];
     const V_DIMS = { player: { w: 45, hB: 18, hC: 14, lB: 100, lC: 45, zOff: 25 }, speedster: { w: 35, hB: 14, hC: 10, lB: 90, lC: 40, zOff: 20 }, commuter: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 }, tank: { w: 70, hB: 40, hC: 25, lB: 140, lC: 70, zOff: 35 }, asteroid: { w: 70, hB: 60, hC: 0, lB: 70, lC: 0, zOff: 0 } };
-
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; } window.onresize = resize; resize();
     window.showScreen = function(id) { document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); if(id) document.getElementById(id).classList.remove('hidden'); };
 
@@ -616,7 +615,8 @@ function update(dt) {
             if (!crossTriggered) {
                 p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
                 
-                if (TRACKS[window.activeTrack].hasBoost) {
+                let activeTrackData = TRACKS[window.activeTrack];
+                if (activeTrackData && activeTrackData.hasBoost) {
                     let padSpacing = 2000;
                     if (Math.floor(p1.dist / padSpacing) > Math.floor(prevDist / padSpacing) && p1.dist < TOTAL_DIST) {
                         p1.speed = 900; p1.nitro = 100;
@@ -625,9 +625,19 @@ function update(dt) {
             }
 
             traffic.forEach(t => {
-                if(window.isHost) { t.d += ((t.s * 0.277 * 4.0) * dt); let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250); if (carAhead && t.s > carAhead.s) t.s = Math.max(0, t.s - 100 * dt); }
-                let lBound = V_DIMS[t.type].lB; let hitZ = (lBound * 0.6) + (p1.speed * dt * 0.2); 
-                if(Math.abs(p1.dist - t.d) < hitZ && Math.abs(p1.lane - t.l) < 0.40 && !p1.dead && !crossTriggered) localWreck();s
+                if(window.isHost) { 
+                    t.d += ((t.s * 0.277 * 4.0) * dt); 
+                    let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250); 
+                    if (carAhead && t.s > carAhead.s) t.s = Math.max(0, t.s - 100 * dt); 
+                }
+                
+                // BULLETPROOF SHIELD: Prevent game crash if a hitbox is missing
+                let objDims = V_DIMS[t.type];
+                if (objDims) {
+                    let lBound = objDims.lB; 
+                    let hitZ = (lBound * 0.6) + (p1.speed * dt * 0.2); 
+                    if(Math.abs(p1.dist - t.d) < hitZ && Math.abs(p1.lane - t.l) < 0.40 && !p1.dead && !crossTriggered) localWreck();
+                }
             });
 
             if(p1.dist >= TOTAL_DIST && !p1.dead && !crossTriggered) {
@@ -867,7 +877,8 @@ function update(dt) {
         clients = []; window.isHost = false; raceFinished = false; crossTriggered = false; window.spectatingId = null; ignitionLocked = false; p1.isReady = false; window.lobbyPlayers = [];
         lastTime = 0; window.gameState = 'MENU';
         window.showScreen('screen-menu'); document.getElementById('progress-bar').classList.add('hidden'); document.getElementById('spectator-ui').classList.add('hidden');
-    };
+  };
 
 </script>
-Added Google verification
+</body>
+</html>
