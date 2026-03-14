@@ -725,7 +725,7 @@ function update(dt) {
             });
 
             if(p1.dist >= TOTAL_DIST && !p1.dead && !crossTriggered) {
-                flashOpacity = 1.0;
+                window.flashOpacity = 1.0; // Attach to window so it never crashes
                 crossTriggered = true; p1.speed = 0; p1.dist = TOTAL_DIST; p1.finishTime = performance.now();
                 if (window.isHost) triggerGlobalFinish(); 
                 else { try { hostConnToLobby.send({type: 'crossed_finish_line'}); } catch(e){} }
@@ -972,11 +972,11 @@ function update(dt) {
         }
 
         // VICTORY FLASH RENDERER
-        if (flashOpacity > 0) {
-            ctx.fillStyle = `rgba(255, 255, 255, ${flashOpacity})`;
+        if (window.flashOpacity > 0) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${window.flashOpacity})`;
             ctx.fillRect(0, 0, w, h);
-            flashOpacity -= 0.8 * (0.016);
-            if (flashOpacity < 0) flashOpacity = 0;
+            window.flashOpacity -= 0.8 * (0.016);
+            if (window.flashOpacity < 0) window.flashOpacity = 0;
         }
 
         ctx.restore();
