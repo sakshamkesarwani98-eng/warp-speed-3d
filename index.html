@@ -50,7 +50,12 @@
             if (user) {
                 window.userUID = user.uid;
                 if (user.isAnonymous) {
-                    window.playerName = "GUEST_" + Math.floor(1000 + Math.random() * 9000);
+                    let savedName = localStorage.getItem('warpspeed_guest_name');
+                    if (!savedName) {
+                        savedName = "GUEST_" + Math.floor(1000 + Math.random() * 9000);
+                        localStorage.setItem('warpspeed_guest_name', savedName);
+                    }
+                    window.playerName = savedName;
                     updateHUDName();
                     window.showScreen('screen-menu');
                 } else {
@@ -93,7 +98,7 @@
             btn.innerText = "SEARCHING..."; btn.disabled = true;
             
             // Randomized stagger to aggressively prevent dual room creation
-            await new Promise(r => setTimeout(r, 250 + Math.random() * 750));
+            await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
 
             let attempts = 0, success = false, targetCode = null, isCreating = false;
 
@@ -104,7 +109,7 @@
                         const snap = await transaction.get(publicRef);
                         let now = Date.now();
                         // Verify room is open, has space, and heartbeat is fresh (30s)
-                        if (snap.exists() && snap.data().status === "OPEN" && snap.data().playerCount < 10 && (now - snap.data().timestamp < 30000)) {
+                        if (snap.exists() && snap.data().status === "LOBBY" && snap.data().playerCount < 10 && (now - snap.data().timestamp < 30000)) {
                             targetCode = snap.data().code;
                             window.activeTrack = snap.data().trackId || 0;
                             transaction.update(publicRef, { playerCount: snap.data().playerCount + 1, timestamp: now });
@@ -112,7 +117,7 @@
                             targetCode = "PUB" + Math.random().toString(36).substring(2,6).toUpperCase();
                             isCreating = true;
                             window.activeTrack = Math.floor(Math.random() * TRACKS.length);
-                            transaction.set(publicRef, { code: targetCode, timestamp: now, playerCount: 1, status: "OPEN", trackId: window.activeTrack });
+                            transaction.set(publicRef, { code: targetCode, timestamp: now, playerCount: 1, status: "LOBBY", trackId: window.activeTrack });
                         }
                     });
                     success = true;
@@ -515,9 +520,14 @@
         if (window.countdownTimer) clearInterval(window.countdownTimer);
         document.getElementById('countdown-ui').classList.add('hidden');
         
-        lastTime = performance.now(); 
-        
-        window.gameState = 'RACE'; p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; raceFinished = false; crossTriggered = false; p1.camZoom = 0.55; p1.finishTime = 999999999;
+      lastTime = performance.now(); 
+
+    // Lock the public room
+    if (window.isHost && !window.isPrivateRoom) {
+        try { setDoc(doc(db, "matchmaking", "LATEST_PUBLIC"), { status: "RACING" }, { merge: true }); } catch(e){}
+    }
+    
+    window.gameState = 'RACE'; p1.dist = 0; p1.speed = 0; p1.nitro = 100; p1.lane = 1; p1.camLane = 1; p1.dead = false; raceFinished = false; crossTriggered = false;
         if(isTouchDevice) document.getElementById('mobile-controls').classList.remove('hidden');
         document.getElementById('hud').classList.remove('hidden'); window.spectatingId = null;
         document.getElementById('hud-dist').parentElement.innerHTML = '<span class="hud-label">DISTANCE</span> <br><span id="hud-dist">0</span> / ' + TOTAL_DIST + 'M';
