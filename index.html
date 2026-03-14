@@ -159,6 +159,9 @@
         #nitro-container { position: relative; width: 220px; height: 20px; background: rgba(0,0,0,0.6); border: 2px solid #fff; margin-top: 5px; border-radius: 4px; overflow: hidden; }
         #nitro-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00f0ff, #00ffcc); transition: width 0.1s; }
         
+        #asteroid-warning { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); color: #ff0000; font-size: 1.5rem; z-index: 60; text-shadow: 0 0 10px #f00, 2px 2px 0 #000; animation: flashWarning 1s infinite; pointer-events: none; }
+        @keyframes flashWarning { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
         /* Screens */
         .screen { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 30; backdrop-filter: blur(8px); }
         .hidden { display: none !important; }
@@ -497,15 +500,21 @@
                     for (let d = 800; d < TOTAL_DIST + 8000; d += 250) {
                         let safeLane = Math.floor(d / 500) % 3; 
 
-                       for (let lane = 0; lane < 3; lane++) {
+                      for (let lane = 0; lane < 3; lane++) {
                             if (lane === safeLane) continue; 
                             if (Math.random() < 0.4 && (d - lastZ[lane] > 300)) { 
                                 let isSpace = TRACKS[window.activeTrack].isSpace;
-                                let type = isSpace ? 'asteroid' : types[Math.floor(Math.random()*types.length)]; 
-                                let bSpeed = type === 'speedster' ? 120+Math.random()*20 : (type === 'tank' ? 50+Math.random()*10 : 80+Math.random()*20);
-                                if (isSpace) bSpeed = 30 + Math.random()*30; // Asteroids drift slowly
-                                let col = isSpace ? {f:"#555", t:"#666", s:"#444", b:"#333"} : COLORS[Math.floor(Math.random() * COLORS.length)];
-                                traffic.push({ d: d, l: lane, s: bSpeed, type: type, col: col }); lastZ[lane] = d;
+                                if (isSpace) {
+                                    if (d < TOTAL_DIST) { // Only spawn before finish line
+                                        traffic.push({ d: d, l: lane, s: 0, type: 'asteroid', col: {f:"#555", t:"#666", s:"#444", b:"#333"}, state: 0, y: 2000 });
+                                        lastZ[lane] = d;
+                                    }
+                                } else {
+                                    let type = types[Math.floor(Math.random()*types.length)]; 
+                                    let bSpeed = type === 'speedster' ? 120+Math.random()*20 : (type === 'tank' ? 50+Math.random()*10 : 80+Math.random()*20);
+                                    traffic.push({ d: d, l: lane, s: bSpeed, type: type, col: COLORS[Math.floor(Math.random() * COLORS.length)] }); 
+                                    lastZ[lane] = d;
+                                }
                             }
                         }
                     }
@@ -536,6 +545,7 @@
         if(isTouchDevice) document.getElementById('mobile-controls').classList.remove('hidden');
         document.getElementById('hud').classList.remove('hidden'); window.spectatingId = null;
         document.getElementById('hud-dist').parentElement.innerHTML = '<span class="hud-label">DISTANCE</span> <br><span id="hud-dist">0</span> / ' + TOTAL_DIST + 'M';
+        if (TRACKS[window.activeTrack].isSpace) document.getElementById('asteroid-warning').classList.remove('hidden');
     }
 
     function updateLobbyUI() {
@@ -626,17 +636,36 @@ function update(dt) {
 
             traffic.forEach(t => {
                 if(window.isHost) { 
-                    t.d += ((t.s * 0.277 * 4.0) * dt); 
-                    let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250); 
-                    if (carAhead && t.s > carAhead.s) t.s = Math.max(0, t.s - 100 * dt); 
+                    if (t.type === 'asteroid') {
+                        // Find the lead player's distance
+                        let leadDist = p1.dist;
+                        clients.forEach(c => { if (!c.dead && c.dist > leadDist) leadDist = c.dist; });
+                        
+                        // Trigger fall if lead player gets within 1200m
+                        if (t.state === 0 && (t.d - leadDist) < 1200 && (t.d - leadDist) > 0) t.state = 1; 
+                        
+                        // Apply Gravity
+                        if (t.state === 1) {
+                            t.y -= 3500 * dt; 
+                            if (t.y <= 0) { t.y = 0; t.state = 2; } // Landed and permanent
+                        }
+                    } else {
+                        t.d += ((t.s * 0.277 * 4.0) * dt); 
+                        let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250 && other.type !== 'asteroid'); 
+                        if (carAhead && t.s > carAhead.s) t.s = Math.max(0, t.s - 100 * dt); 
+                    }
                 }
                 
-                // BULLETPROOF SHIELD: Prevent game crash if a hitbox is missing
+                // BULLETPROOF SHIELD
                 let objDims = V_DIMS[t.type];
                 if (objDims) {
-                    let lBound = objDims.lB; 
-                    let hitZ = (lBound * 0.6) + (p1.speed * dt * 0.2); 
-                    if(Math.abs(p1.dist - t.d) < hitZ && Math.abs(p1.lane - t.l) < 0.40 && !p1.dead && !crossTriggered) localWreck();
+                    // Only wreck if it's a car, OR if it's an asteroid that has reached ground level (y < 50)
+                    let isDangerous = t.type !== 'asteroid' || (t.type === 'asteroid' && t.y < 50);
+                    if (isDangerous) {
+                        let lBound = objDims.lB; 
+                        let hitZ = (lBound * 0.6) + (p1.speed * dt * 0.2); 
+                        if(Math.abs(p1.dist - t.d) < hitZ && Math.abs(p1.lane - t.l) < 0.40 && !p1.dead && !crossTriggered) localWreck();
+                    }
                 }
             });
 
@@ -795,11 +824,18 @@ function update(dt) {
             }
 
             let worldX = (obj.l - 1) * 150; let dims = V_DIMS[obj.type]; 
-            
             if (obj.type === 'asteroid') {
-                draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0);
-                draw3DBox(worldX, obj.d + 15, dims.w*0.8, dims.hB*0.5, dims.lB*0.5, {f:"#444", t:"#555", s:"#333", b:"#222"}, dims.hB);
-                return; // Skip taillights and name tags for rocks
+                let currentY = obj.y || 0;
+                
+                // Draw Red Warning Zone on the ground if it hasn't landed
+                if (obj.state === 0 || obj.state === 1) {
+                    draw3DBox(worldX, obj.d, dims.w * 1.5, 2, dims.lB * 1.5, {f:"#ff0000", t:"#ff0000", s:"#aa0000", b:"#550000"}, 0);
+                }
+                
+                // Draw the asteroid high in the air or on the ground
+                draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, currentY);
+                draw3DBox(worldX, obj.d + 15, dims.w*0.8, dims.hB*0.5, dims.lB*0.5, {f:"#444", t:"#555", s:"#333", b:"#222"}, currentY + dims.hB);
+                return; 
             }
 
             let backFace = draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0); 
@@ -849,7 +885,7 @@ function update(dt) {
 
     function showFinalResults(allRacers, reasonStr) {
         if(window.gameState === 'END') return; window.gameState = 'END'; window.showScreen('screen-gameover');
-        document.getElementById('mobile-controls').classList.add('hidden'); document.getElementById('hud').classList.add('hidden'); document.getElementById('progress-bar').classList.add('hidden'); document.getElementById('spectator-ui').classList.add('hidden');
+        document.getElementById('mobile-controls').classList.add('hidden'); document.getElementById('hud').classList.add('hidden'); document.getElementById('progress-bar').classList.add('hidden'); document.getElementById('spectator-ui').classList.add('hidden'); document.getElementById('asteroid-warning').classList.add('hidden');
         if (!allRacers || allRacers.length === 0) { document.getElementById('go-reason').innerText = reasonStr; return; }
 
         let myData = allRacers.find(r => r.id === myPeerId); let myRank = allRacers.findIndex(r => r.id === myPeerId) + 1;
@@ -876,7 +912,7 @@ function update(dt) {
         if(peer) { try{ peer.destroy(); } catch(e) {} peer = null; }
         clients = []; window.isHost = false; raceFinished = false; crossTriggered = false; window.spectatingId = null; ignitionLocked = false; p1.isReady = false; window.lobbyPlayers = [];
         lastTime = 0; window.gameState = 'MENU';
-        window.showScreen('screen-menu'); document.getElementById('progress-bar').classList.add('hidden'); document.getElementById('spectator-ui').classList.add('hidden');
+        window.showScreen('screen-menu'); document.getElementById('progress-bar').classList.add('hidden'); document.getElementById('spectator-ui').classList.add('hidden'); document.getElementById('asteroid-warning').classList.add('hidden');
   };
 
 </script>
