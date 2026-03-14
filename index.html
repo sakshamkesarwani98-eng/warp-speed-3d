@@ -248,14 +248,13 @@
     <div id="screen-host-setup" class="screen hidden">
         <h2>PRIVATE ROOM</h2>
         <input type="text" id="host-pass" placeholder="OPTIONAL PASSWORD">
-        <<select id="host-track-select" style="padding: 15px; font-size: 1.2rem; text-align: center; border: 4px solid #fff; background: #222; color: #00ffcc; margin-bottom: 10px; border-radius: 4px; width: 300px; text-transform: uppercase;">
+        <select id="host-track-select" style="padding: 15px; font-size: 1.2rem; text-align: center; border: 4px solid #fff; background: #222; color: #00ffcc; margin-bottom: 10px; border-radius: 4px; width: 300px; text-transform: uppercase;">
             <option value="0">CLASSIC HIGHWAY</option>
             <option value="1">NEON CYBER TUNNEL</option>
             <option value="2">DEEP SPACE ASTEROIDS</option>
             <option value="3">THE VOLCANIC FORGE</option>
             <option value="4">THE UNDERWATER ABYSS</option>
             <option value="5">THE GLITCH DIMENSION</option>
-            <option value="6">?? PROJECT X ??</option>
         </select>
         <button class="btn btn-main" onclick="window.hostRoom(null, true)">CREATE LOBBY</button>
         <button class="btn" onclick="window.showScreen('screen-menu')">BACK</button>
@@ -298,8 +297,7 @@
         { id: 2, name: "DEEP SPACE ASTEROIDS", dist: 10000, skyTop: "#000000", skyBot: "#000000", ground: "#050505", hasBoost: false, isSpace: true, isVolcano: false },
         { id: 3, name: "THE VOLCANIC FORGE", dist: 25000, skyTop: "#300000", skyBot: "#ff4500", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: true },
         { id: 4, name: "THE UNDERWATER ABYSS", dist: 15000, skyTop: "#001a33", skyBot: "#004d99", ground: "#000d1a", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: true },
-        { id: 5, name: "THE GLITCH DIMENSION", dist: 20000, skyTop: "#110022", skyBot: "#000000", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: true },
-        { id: 6, name: "?? PROJECT X ??", dist: 30000, skyTop: "#1a0033", skyBot: "#000000", ground: "#050505", hasBoost: true, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: false, isSecret: true }
+        { id: 5, name: "THE GLITCH DIMENSION", dist: 20000, skyTop: "#110022", skyBot: "#000000", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: true }
     ];
 
     let peer = null, roomCode = "", roomPass = "", myPeerId = "";
@@ -311,7 +309,7 @@
     window.spectatingId = null;
 
     const COLORS = [ { f: "#b02", t: "#d03", s: "#801", b: "#e04" }, { f: "#15b", t: "#26c", s: "#049", b: "#37d" }, { f: "#182", t: "#293", s: "#061", b: "#3a4" }, { f: "#aa1", t: "#bb2", s: "#880", b: "#cc3" }, { f: "#80d", t: "#91e", s: "#60b", b: "#a2f" }, { f: "#d60", t: "#f80", s: "#a40", b: "#fa2" }, { f: "#199", t: "#2aa", s: "#077", b: "#3bb" }, { f: "#e17", t: "#f28", s: "#c05", b: "#f39" }, { f: "#ddd", t: "#eee", s: "#bbb", b: "#fff" }, { f: "#333", t: "#444", s: "#111", b: "#555" } ];
-    const V_DIMS = { player: { w: 45, hB: 18, hC: 14, lB: 100, lC: 45, zOff: 25 }, speedster: { w: 35, hB: 14, hC: 10, lB: 90, lC: 40, zOff: 20 }, commuter: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 }, tank: { w: 70, hB: 40, hC: 25, lB: 140, lC: 70, zOff: 35 }, asteroid: { w: 70, hB: 60, hC: 0, lB: 70, lC: 0, zOff: 0 }, magma: { w: 80, hB: 250, hC: 0, lB: 80, lC: 0, zOff: 0 }, puddle: { w: 120, hB: 2, hC: 0, lB: 120, lC: 0, zOff: 0 }, jellyfish: { w: 60, hB: 80, hC: 0, lB: 60, lC: 0, zOff: 0 }, bubble: { w: 30, hB: 30, hC: 0, lB: 30, lC: 0, zOff: 0 }, phantom: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 }, doppelganger: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 } };
+    const V_DIMS = { player: { w: 45, hB: 18, hC: 14, lB: 100, lC: 45, zOff: 25 }, speedster: { w: 35, hB: 14, hC: 10, lB: 90, lC: 40, zOff: 20 }, commuter: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 }, tank: { w: 70, hB: 40, hC: 25, lB: 140, lC: 70, zOff: 35 }, asteroid: { w: 70, hB: 60, hC: 0, lB: 70, lC: 0, zOff: 0 }, magma: { w: 80, hB: 250, hC: 0, lB: 80, lC: 0, zOff: 0 }, puddle: { w: 120, hB: 2, hC: 0, lB: 120, lC: 0, zOff: 0 }, jellyfish: { w: 60, hB: 80, hC: 0, lB: 60, lC: 0, zOff: 0 }, bubble: { w: 30, hB: 30, hC: 0, lB: 30, lC: 0, zOff: 0 }, phantom: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 } };
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; } window.onresize = resize; resize();
     window.showScreen = function(id) { document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); if(id) document.getElementById(id).classList.remove('hidden'); };
 
@@ -544,12 +542,6 @@
                                         traffic.push({ d: d, l: lane, s: 100 + Math.random()*60, type: type, col: {f:"#0f0", t:"#f0f", s:"#0ff", b:"#fff"} });
                                         lastZ[lane] = d;
                                     }
-                                } else if (TRACKS[window.activeTrack].isSecret) {
-                                    if (d < TOTAL_DIST && Math.random() < 0.15) {
-                                        // Spawns a ghost with YOUR exact color
-                                        traffic.push({ d: d, l: lane, s: 400, type: 'doppelganger', col: COLORS[p1.colIdx % COLORS.length] });
-                                        lastZ[lane] = d;
-                                    }
                                 } else {
                                     let type = types[Math.floor(Math.random()*types.length)]; 
                                     let bSpeed = type === 'speedster' ? 120+Math.random()*20 : (type === 'tank' ? 50+Math.random()*10 : 80+Math.random()*20);
@@ -671,12 +663,6 @@ function update(dt) {
                 if (p1.turboActive) { p1.nitro -= 16.5 * dt; if (p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; } } else if (p1.nitro < 100) p1.nitro += 15 * dt;
                 let topSpeed = p1.turboActive ? 640 : 360;
                 let activeTrackData = TRACKS[window.activeTrack];
-                
-                // PROJECT X: BREAK THE LIMITER
-                if (activeTrackData && activeTrackData.isSecret) {
-                    topSpeed = p1.turboActive ? 1400 : 800; // Double speed!
-                    p1.nitro = 100; // Infinite Nitro
-                }
                 if (activeTrackData && activeTrackData.isVolcano) {
                     if (gasPressed && !crossTriggered) p1.heat += 12 * dt;
                     if (p1.isBraking) p1.heat -= 80 * dt;
@@ -717,12 +703,6 @@ function update(dt) {
                         if (t.state === 0 && (t.d - leadDist) < 800 && (t.d - leadDist) > 0) t.state = 1;
                         if (t.state === 1) { t.y += 2000 * dt; if (t.y >= 0) { t.y = 0; t.state = 2; } }
                     } else if (t.type !== 'puddle') {
-                        // DOPPELGANGER AI: Mirror the player's lane and go slightly faster
-                        if (t.type === 'doppelganger') {
-                            t.l += (p1.lane - t.l) * 4 * dt; 
-                            t.s = p1.speed + 50; 
-                        }
-                        
                         t.d += ((t.s * 0.277 * 4.0) * dt); 
                         let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250 && other.type !== 'asteroid' && other.type !== 'magma' && other.type !== 'puddle'); 
                         if (carAhead && t.s > carAhead.s) t.s = Math.max(0, t.s - 100 * dt); 
@@ -964,13 +944,6 @@ function update(dt) {
             if (obj.type === 'phantom') {
                 if (Math.floor(performance.now() / 40) % 2 === 0) return; // Strobe flickering effect
                 draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, {f:"#0f0", t:"#f0f", s:"#0ff", b:"#fff"}, 0);
-                return;
-            }
-            if (obj.type === 'doppelganger') {
-                ctx.globalAlpha = 0.4; // Ghostly transparency
-                draw3DBox(worldX, obj.d, V_DIMS.player.w, V_DIMS.player.hB, V_DIMS.player.lB, obj.col, 0);
-                draw3DBox(worldX, obj.d + V_DIMS.player.zOff, V_DIMS.player.w * 0.8, V_DIMS.player.hC, V_DIMS.player.lC, {f: "#fff", t: "#fff", s: "#fff", b: "#fff"}, V_DIMS.player.hB); // Glowing white top
-                ctx.globalAlpha = 1.0;
                 return;
             }
             let backFace = draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0); 
