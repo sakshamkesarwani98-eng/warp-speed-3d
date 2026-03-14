@@ -20,7 +20,7 @@
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -45,20 +45,6 @@
         window.gameState = 'AUTH'; // STRICT STATE-GATING
         window.isHost = false;
         window.isPrivateRoom = false;
-
-        // THE REDIRECT HANDSHAKE
-        getRedirectResult(auth)
-            .then((result) => {
-                if (result && result.user) {
-                    console.log("GOOGLE LOGIN SUCCESS:", result.user.displayName);
-                }
-            })
-            .catch((error) => {
-                console.error("AUTH ERROR:", error.code, error.message);
-                if (error.code === 'auth/account-exists-with-different-credential') {
-                    alert("AN ACCOUNT ALREADY EXISTS WITH THIS EMAIL.");
-                }
-            });
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -152,11 +138,19 @@
         };
 
         window.doGuest = () => signInAnonymously(auth);
-        window.doGoogle = () => {
-            // Provide visual feedback that the redirect is starting
-            const btn = document.querySelector('.btn-google');
-            if(btn) btn.innerText = "REDIRECTING TO GOOGLE...";
-            signInWithRedirect(auth, googleProvider);
+        window.doGoogle = async () => {
+            try {
+                const btn = document.querySelector('.btn-google');
+                if(btn) btn.innerText = "OPENING GOOGLE...";
+                const result = await signInWithPopup(auth, googleProvider);
+                window.playerName = result.user.displayName.toUpperCase();
+                console.log("Successfully logged in as: " + window.playerName);
+            } catch (error) {
+                console.error("Popup Error:", error.code, error.message);
+                const btn = document.querySelector('.btn-google');
+                if(btn) btn.innerText = "CONTINUE WITH GOOGLE";
+                if (error.code !== 'auth/popup-closed-by-user') alert("LOGIN ERROR: " + error.message);
+            }
         };
         window.doLogout = () => signOut(auth);
         function updateHUDName() { document.getElementById('hud-player-name').innerText = "RACER: " + window.playerName; }
