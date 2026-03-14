@@ -253,6 +253,7 @@
             <option value="1">NEON CYBER TUNNEL</option>
             <option value="2">DEEP SPACE ASTEROIDS</option>
             <option value="3">THE VOLCANIC FORGE</option>
+            <option value="4">THE UNDERWATER ABYSS</option>
         </select>
         <button class="btn btn-main" onclick="window.hostRoom(null, true)">CREATE LOBBY</button>
         <button class="btn" onclick="window.showScreen('screen-menu')">BACK</button>
@@ -292,8 +293,9 @@
     const TRACKS = [
         { id: 0, name: "CLASSIC HIGHWAY", dist: 10000, skyTop: "#0a0a2a", skyBot: "#3a1c71", ground: "#111", hasBoost: false, isSpace: false },
         { id: 1, name: "NEON CYBER TUNNEL", dist: 20000, skyTop: "#000000", skyBot: "#0a001a", ground: "#050011", hasBoost: true, isSpace: false },
-        { id: 2, name: "DEEP SPACE ASTEROIDS", dist: 15000, skyTop: "#000000", skyBot: "#000000", ground: "#050505", hasBoost: false, isSpace: true, isVolcano: false },
-        { id: 3, name: "THE VOLCANIC FORGE", dist: 25000, skyTop: "#300000", skyBot: "#ff4500", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: true }
+        { id: 2, name: "DEEP SPACE ASTEROIDS", dist: 10000, skyTop: "#000000", skyBot: "#000000", ground: "#050505", hasBoost: false, isSpace: true, isVolcano: false },
+        { id: 3, name: "THE VOLCANIC FORGE", dist: 25000, skyTop: "#300000", skyBot: "#ff4500", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: true },
+        { id: 4, name: "THE UNDERWATER ABYSS", dist: 15000, skyTop: "#001a33", skyBot: "#004d99", ground: "#000d1a", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: true }
     ];
 
     let peer = null, roomCode = "", roomPass = "", myPeerId = "";
@@ -305,7 +307,7 @@
     window.spectatingId = null;
 
     const COLORS = [ { f: "#b02", t: "#d03", s: "#801", b: "#e04" }, { f: "#15b", t: "#26c", s: "#049", b: "#37d" }, { f: "#182", t: "#293", s: "#061", b: "#3a4" }, { f: "#aa1", t: "#bb2", s: "#880", b: "#cc3" }, { f: "#80d", t: "#91e", s: "#60b", b: "#a2f" }, { f: "#d60", t: "#f80", s: "#a40", b: "#fa2" }, { f: "#199", t: "#2aa", s: "#077", b: "#3bb" }, { f: "#e17", t: "#f28", s: "#c05", b: "#f39" }, { f: "#ddd", t: "#eee", s: "#bbb", b: "#fff" }, { f: "#333", t: "#444", s: "#111", b: "#555" } ];
-    const V_DIMS = { player: { w: 45, hB: 18, hC: 14, lB: 100, lC: 45, zOff: 25 }, speedster: { w: 35, hB: 14, hC: 10, lB: 90, lC: 40, zOff: 20 }, commuter: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 }, tank: { w: 70, hB: 40, hC: 25, lB: 140, lC: 70, zOff: 35 }, asteroid: { w: 70, hB: 60, hC: 0, lB: 70, lC: 0, zOff: 0 }, magma: { w: 80, hB: 250, hC: 0, lB: 80, lC: 0, zOff: 0 }, puddle: { w: 120, hB: 2, hC: 0, lB: 120, lC: 0, zOff: 0 } };
+    const V_DIMS = { player: { w: 45, hB: 18, hC: 14, lB: 100, lC: 45, zOff: 25 }, speedster: { w: 35, hB: 14, hC: 10, lB: 90, lC: 40, zOff: 20 }, commuter: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 }, tank: { w: 70, hB: 40, hC: 25, lB: 140, lC: 70, zOff: 35 }, asteroid: { w: 70, hB: 60, hC: 0, lB: 70, lC: 0, zOff: 0 }, magma: { w: 80, hB: 250, hC: 0, lB: 80, lC: 0, zOff: 0 }, puddle: { w: 120, hB: 2, hC: 0, lB: 120, lC: 0, zOff: 0 }, jellyfish: { w: 60, hB: 80, hC: 0, lB: 60, lC: 0, zOff: 0 }, bubble: { w: 30, hB: 30, hC: 0, lB: 30, lC: 0, zOff: 0 } };
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; } window.onresize = resize; resize();
     window.showScreen = function(id) { document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); if(id) document.getElementById(id).classList.remove('hidden'); };
 
@@ -519,10 +521,17 @@
                                         lastZ[lane] = d;
                                     }
                                 } else if (isVolcano) {
-                                    if (d < TOTAL_DIST) {
+                                   if (d < TOTAL_DIST) {
                                         let isMagma = (d % 1000 === 0);
                                         if (isMagma) traffic.push({ d: d, l: Math.floor(Math.random()*3), s: 0, type: 'magma', col: {f:"#ff2200", t:"#ff4400", s:"#cc1100", b:"#880000"}, state: 0, y: -250 });
                                         else if (Math.random() < 0.6) traffic.push({ d: d, l: lane, s: 0, type: 'puddle', col: {f:"#ff6600", t:"#ff8800", s:"#cc4400", b:"#992200"}, y: 0 });
+                                        lastZ[lane] = d;
+                                    }
+                                } else if (TRACKS[window.activeTrack].isAbyss) {
+                                    if (d < TOTAL_DIST) {
+                                        let type = Math.random() < 0.3 ? 'jellyfish' : 'bubble';
+                                        let col = type === 'jellyfish' ? {f:"#00ffff", t:"#0088ff", s:"#004488", b:"#002244"} : {f:"#ffffff33", t:"#ffffff33", s:"#ffffff33", b:"#ffffff33"};
+                                        traffic.push({ d: d, l: lane, s: 20 + Math.random()*20, type: type, col: col, y: type === 'bubble' ? -50 : 0 });
                                         lastZ[lane] = d;
                                     }
                                 } else {
@@ -640,10 +649,13 @@ function update(dt) {
                     if (p1.heat > 90) topSpeed = 200; // Engine Overheat Penalty
                 }
                 
+                let accelRate = (activeTrackData && activeTrackData.isAbyss) ? 150 : 300; 
+                let friction = (activeTrackData && activeTrackData.isAbyss) ? 120 : 80;
+
                 if (gasPressed) {
-                    if (p1.speed <= topSpeed) p1.speed = Math.min(topSpeed, p1.speed + 300 * dt);
+                    if (p1.speed <= topSpeed) p1.speed = Math.min(topSpeed, p1.speed + accelRate * dt);
                     else p1.speed = Math.max(topSpeed, p1.speed - 150 * dt);
-                } else p1.speed = Math.max(0, p1.speed - 80 * dt);
+                } else p1.speed = Math.max(0, p1.speed - friction * dt);
             }
             
             let prevDist = p1.dist;
@@ -742,9 +754,21 @@ function update(dt) {
                 ctx.fillRect(sx, sy, Math.random() > 0.5 ? 2 : 1, Math.random() > 0.5 ? 2 : 1);
             }
         }
+        
+        // Render Abyss Bubbles & Tint
+        if (tData.isAbyss) {
+            ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+            for(let i=0; i<40; i++) {
+                let bx = (Math.sin(performance.now()*0.001 + i) * 0.5 + 0.5) * w;
+                let by = ((performance.now()*0.1 + i*100) % horizon);
+                ctx.beginPath(); ctx.arc(bx, horizon - by, 2, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.fillStyle = "rgba(0, 80, 255, 0.15)";
+            ctx.fillRect(0, 0, w, h);
+        }
+
         ctx.fillStyle = tData.ground; ctx.fillRect(0, horizon, w, h-horizon);
         let viewState = { dist: p1.dist, camLane: p1.camLane, camZoom: p1.camZoom, speed: p1.speed, turbo: p1.turboActive };
-        
         if (p1.dead && window.spectatingId) {
             let target = clients.find(c => c.id === window.spectatingId);
             if (target) { viewState.dist = target.dist; viewState.speed = target.speed; viewState.turbo = target.speed > 400; document.getElementById('spec-name').innerText = target.name; document.getElementById('hud-speed').innerText = Math.floor(target.speed); document.getElementById('hud-dist').innerText = Math.floor(target.dist); }
@@ -875,11 +899,15 @@ function update(dt) {
                 }
                 return;
             }
-            if (obj.type === 'puddle') {
-                draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0);
+            if (obj.type === 'jellyfish') {
+                let pulse = Math.sin(performance.now() * 0.005) * 10;
+                draw3DBox(worldX, obj.d, dims.w + pulse, dims.hB, dims.lB, obj.col, 0);
                 return;
             }
-
+            if (obj.type === 'bubble') {
+                draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, obj.y);
+                return;
+            }
             let backFace = draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0); 
             draw3DBox(worldX, obj.d + dims.zOff, dims.w * 0.8, dims.hC, dims.lC, {f: "#111", t: "#222", s: "#0a0a0a", b: "#151515"}, dims.hB);
             
