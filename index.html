@@ -542,6 +542,12 @@
                                         traffic.push({ d: d, l: lane, s: 100 + Math.random()*60, type: type, col: {f:"#0f0", t:"#f0f", s:"#0ff", b:"#fff"} });
                                         lastZ[lane] = d;
                                     }
+                                } else if (TRACKS[window.activeTrack].isSecret) {
+                                    if (d < TOTAL_DIST && Math.random() < 0.15) {
+                                        // Spawns a ghost with YOUR exact color
+                                        traffic.push({ d: d, l: lane, s: 400, type: 'doppelganger', col: COLORS[p1.colIdx % COLORS.length] });
+                                        lastZ[lane] = d;
+                                    }
                                 } else {
                                     let type = types[Math.floor(Math.random()*types.length)]; 
                                     let bSpeed = type === 'speedster' ? 120+Math.random()*20 : (type === 'tank' ? 50+Math.random()*10 : 80+Math.random()*20);
@@ -663,6 +669,12 @@ function update(dt) {
                 if (p1.turboActive) { p1.nitro -= 16.5 * dt; if (p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; } } else if (p1.nitro < 100) p1.nitro += 15 * dt;
                 let topSpeed = p1.turboActive ? 640 : 360;
                 let activeTrackData = TRACKS[window.activeTrack];
+                
+                // PROJECT X: BREAK THE LIMITER
+                if (activeTrackData && activeTrackData.isSecret) {
+                    topSpeed = p1.turboActive ? 1400 : 800; // Double speed!
+                    p1.nitro = 100; // Infinite Nitro
+                }
                 if (activeTrackData && activeTrackData.isVolcano) {
                     if (gasPressed && !crossTriggered) p1.heat += 12 * dt;
                     if (p1.isBraking) p1.heat -= 80 * dt;
@@ -703,6 +715,12 @@ function update(dt) {
                         if (t.state === 0 && (t.d - leadDist) < 800 && (t.d - leadDist) > 0) t.state = 1;
                         if (t.state === 1) { t.y += 2000 * dt; if (t.y >= 0) { t.y = 0; t.state = 2; } }
                     } else if (t.type !== 'puddle') {
+                        // DOPPELGANGER AI: Mirror the player's lane and go slightly faster
+                        if (t.type === 'doppelganger') {
+                            t.l += (p1.lane - t.l) * 4 * dt; 
+                            t.s = p1.speed + 50; 
+                        }
+                        
                         t.d += ((t.s * 0.277 * 4.0) * dt); 
                         let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250 && other.type !== 'asteroid' && other.type !== 'magma' && other.type !== 'puddle'); 
                         if (carAhead && t.s > carAhead.s) t.s = Math.max(0, t.s - 100 * dt); 
@@ -944,6 +962,13 @@ function update(dt) {
             if (obj.type === 'phantom') {
                 if (Math.floor(performance.now() / 40) % 2 === 0) return; // Strobe flickering effect
                 draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, {f:"#0f0", t:"#f0f", s:"#0ff", b:"#fff"}, 0);
+                return;
+            }
+            if (obj.type === 'doppelganger') {
+                ctx.globalAlpha = 0.4; // Ghostly transparency
+                draw3DBox(worldX, obj.d, V_DIMS.player.w, V_DIMS.player.hB, V_DIMS.player.lB, obj.col, 0);
+                draw3DBox(worldX, obj.d + V_DIMS.player.zOff, V_DIMS.player.w * 0.8, V_DIMS.player.hC, V_DIMS.player.lC, {f: "#fff", t: "#fff", s: "#fff", b: "#fff"}, V_DIMS.player.hB); // Glowing white top
+                ctx.globalAlpha = 1.0;
                 return;
             }
             let backFace = draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0); 
