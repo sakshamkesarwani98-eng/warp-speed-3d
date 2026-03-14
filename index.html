@@ -620,7 +620,7 @@
             traffic.forEach(t => {
                 if(window.isHost) { t.d += ((t.s * 0.277 * 4.0) * dt); let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250); if (carAhead && t.s > carAhead.s) t.s = Math.max(0, t.s - 100 * dt); }
                 let lBound = V_DIMS[t.type].lB; let hitZ = (lBound * 0.6) + (p1.speed * dt * 0.2); 
-                if(Math.abs(p1.dist - t.d) < hitZ && Math.abs(p1.lane - t.l) < 0.40 && !p1.dead) localWreck();
+                if(Math.abs(p1.dist - t.d) < hitZ && Math.abs(p1.lane - t.l) < 0.40 && !p1.dead && !crossTriggered) localWreck();s
             });
 
             if(p1.dist >= TOTAL_DIST && !p1.dead && !crossTriggered) {
