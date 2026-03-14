@@ -590,8 +590,13 @@
             p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
 
             p1.isBraking = keys['KeyS'] || keys['ArrowDown']; let gasPressed = keys['KeyW'] || keys['ArrowUp'];
-            if (p1.isBraking) { p1.turboActive = false; p1.speed = Math.max(0, p1.speed - 800 * dt); } 
-            else {
+           if (crossTriggered) {
+                p1.speed = 0;
+                p1.dist = TOTAL_DIST;
+                p1.turboActive = false;
+            } else if (p1.isBraking) { 
+                p1.turboActive = false; p1.speed = Math.max(0, p1.speed - 800 * dt); 
+            } else {
                 if (keys['ShiftLeft'] && p1.speed > 80 && p1.nitro > 0) { if (!p1.turboActive && p1.nitro > 20) p1.turboActive = true; } else p1.turboActive = false;
                 if (p1.turboActive) { p1.nitro -= 16.5 * dt; if (p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; } } else if (p1.nitro < 100) p1.nitro += 15 * dt;
                 
@@ -603,7 +608,7 @@
             }
             
             let prevDist = p1.dist;
-            p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
+            if (!crossTriggered) p1.dist += (p1.speed * 0.277 * 4.0) * dt;
             
             if (TRACKS[window.activeTrack].hasBoost) {
                 let padSpacing = 2000;
