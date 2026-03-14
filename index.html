@@ -254,6 +254,7 @@
             <option value="2">DEEP SPACE ASTEROIDS</option>
             <option value="3">THE VOLCANIC FORGE</option>
             <option value="4">THE UNDERWATER ABYSS</option>
+            <option value="5">THE GLITCH DIMENSION</option>
         </select>
         <button class="btn btn-main" onclick="window.hostRoom(null, true)">CREATE LOBBY</button>
         <button class="btn" onclick="window.showScreen('screen-menu')">BACK</button>
@@ -295,7 +296,8 @@
         { id: 1, name: "NEON CYBER TUNNEL", dist: 20000, skyTop: "#000000", skyBot: "#0a001a", ground: "#050011", hasBoost: true, isSpace: false },
         { id: 2, name: "DEEP SPACE ASTEROIDS", dist: 10000, skyTop: "#000000", skyBot: "#000000", ground: "#050505", hasBoost: false, isSpace: true, isVolcano: false },
         { id: 3, name: "THE VOLCANIC FORGE", dist: 25000, skyTop: "#300000", skyBot: "#ff4500", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: true },
-        { id: 4, name: "THE UNDERWATER ABYSS", dist: 15000, skyTop: "#001a33", skyBot: "#004d99", ground: "#000d1a", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: true }
+        { id: 4, name: "THE UNDERWATER ABYSS", dist: 15000, skyTop: "#001a33", skyBot: "#004d99", ground: "#000d1a", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: true },
+        { id: 5, name: "THE GLITCH DIMENSION", dist: 20000, skyTop: "#110022", skyBot: "#000000", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: true }
     ];
 
     let peer = null, roomCode = "", roomPass = "", myPeerId = "";
@@ -307,7 +309,7 @@
     window.spectatingId = null;
 
     const COLORS = [ { f: "#b02", t: "#d03", s: "#801", b: "#e04" }, { f: "#15b", t: "#26c", s: "#049", b: "#37d" }, { f: "#182", t: "#293", s: "#061", b: "#3a4" }, { f: "#aa1", t: "#bb2", s: "#880", b: "#cc3" }, { f: "#80d", t: "#91e", s: "#60b", b: "#a2f" }, { f: "#d60", t: "#f80", s: "#a40", b: "#fa2" }, { f: "#199", t: "#2aa", s: "#077", b: "#3bb" }, { f: "#e17", t: "#f28", s: "#c05", b: "#f39" }, { f: "#ddd", t: "#eee", s: "#bbb", b: "#fff" }, { f: "#333", t: "#444", s: "#111", b: "#555" } ];
-    const V_DIMS = { player: { w: 45, hB: 18, hC: 14, lB: 100, lC: 45, zOff: 25 }, speedster: { w: 35, hB: 14, hC: 10, lB: 90, lC: 40, zOff: 20 }, commuter: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 }, tank: { w: 70, hB: 40, hC: 25, lB: 140, lC: 70, zOff: 35 }, asteroid: { w: 70, hB: 60, hC: 0, lB: 70, lC: 0, zOff: 0 }, magma: { w: 80, hB: 250, hC: 0, lB: 80, lC: 0, zOff: 0 }, puddle: { w: 120, hB: 2, hC: 0, lB: 120, lC: 0, zOff: 0 }, jellyfish: { w: 60, hB: 80, hC: 0, lB: 60, lC: 0, zOff: 0 }, bubble: { w: 30, hB: 30, hC: 0, lB: 30, lC: 0, zOff: 0 } };
+    const V_DIMS = { player: { w: 45, hB: 18, hC: 14, lB: 100, lC: 45, zOff: 25 }, speedster: { w: 35, hB: 14, hC: 10, lB: 90, lC: 40, zOff: 20 }, commuter: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 }, tank: { w: 70, hB: 40, hC: 25, lB: 140, lC: 70, zOff: 35 }, asteroid: { w: 70, hB: 60, hC: 0, lB: 70, lC: 0, zOff: 0 }, magma: { w: 80, hB: 250, hC: 0, lB: 80, lC: 0, zOff: 0 }, puddle: { w: 120, hB: 2, hC: 0, lB: 120, lC: 0, zOff: 0 }, jellyfish: { w: 60, hB: 80, hC: 0, lB: 60, lC: 0, zOff: 0 }, bubble: { w: 30, hB: 30, hC: 0, lB: 30, lC: 0, zOff: 0 }, phantom: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 } };
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; } window.onresize = resize; resize();
     window.showScreen = function(id) { document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); if(id) document.getElementById(id).classList.remove('hidden'); };
 
@@ -534,6 +536,12 @@
                                         traffic.push({ d: d, l: lane, s: 20 + Math.random()*20, type: type, col: col, y: type === 'bubble' ? -50 : 0 });
                                         lastZ[lane] = d;
                                     }
+                                } else if (TRACKS[window.activeTrack].isGlitch) {
+                                    if (d < TOTAL_DIST) {
+                                        let type = Math.random() > 0.5 ? 'commuter' : 'phantom';
+                                        traffic.push({ d: d, l: lane, s: 100 + Math.random()*60, type: type, col: {f:"#0f0", t:"#f0f", s:"#0ff", b:"#fff"} });
+                                        lastZ[lane] = d;
+                                    }
                                 } else {
                                     let type = types[Math.floor(Math.random()*types.length)]; 
                                     let bSpeed = type === 'speedster' ? 120+Math.random()*20 : (type === 'tank' ? 50+Math.random()*10 : 80+Math.random()*20);
@@ -625,8 +633,22 @@
 function update(dt) {
         if (!p1.dead) {
             let steerSpeed = 4.5; 
-            if(keys['KeyA'] || keys['ArrowLeft']) p1.lane -= steerSpeed * dt;
-            if(keys['KeyD'] || keys['ArrowRight']) p1.lane += steerSpeed * dt;
+            let leftPressed = keys['KeyA'] || keys['ArrowLeft'];
+            let rightPressed = keys['KeyD'] || keys['ArrowRight'];
+
+            // --- THE GLITCH ENGINE ---
+            if (TRACKS[window.activeTrack] && TRACKS[window.activeTrack].isGlitch && !crossTriggered) {
+                p1.glitchTimer = (p1.glitchTimer || 0) + dt;
+                if (p1.glitchTimer > 4) { // Glitch triggers every 4 seconds!
+                    p1.glitchTimer = 0;
+                    p1.glitchInverted = !p1.glitchInverted; // Invert controls
+                    if (Math.random() < 0.4) p1.lane = Math.floor(Math.random() * 3); // Randomly teleport lanes
+                }
+                if (p1.glitchInverted) { let temp = leftPressed; leftPressed = rightPressed; rightPressed = temp; }
+            } else { p1.glitchInverted = false; }
+
+            if(leftPressed) p1.lane -= steerSpeed * dt;
+            if(rightPressed) p1.lane += steerSpeed * dt;
             p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
 
             p1.isBraking = keys['KeyS'] || keys['ArrowDown']; let gasPressed = keys['KeyW'] || keys['ArrowUp'];
@@ -694,7 +716,7 @@ function update(dt) {
                         if (t.type === 'puddle') {
                             p1.speed = Math.max(150, p1.speed - 400 * dt);
                             p1.heat = Math.min(100, p1.heat + 50 * dt);
-                        } else {
+                        } else if (t.type !== 'phantom') { // Phantoms are harmless holograms!
                             let isDangerous = (t.type !== 'asteroid' && t.type !== 'magma') || (t.type === 'asteroid' && t.y < 50) || (t.type === 'magma' && t.y > -150);
                             if (isDangerous) localWreck();
                         }
@@ -703,6 +725,7 @@ function update(dt) {
             });
 
             if(p1.dist >= TOTAL_DIST && !p1.dead && !crossTriggered) {
+                flashOpacity = 1.0;
                 crossTriggered = true; p1.speed = 0; p1.dist = TOTAL_DIST; p1.finishTime = performance.now();
                 if (window.isHost) triggerGlobalFinish(); 
                 else { try { hostConnToLobby.send({type: 'crossed_finish_line'}); } catch(e){} }
@@ -753,6 +776,12 @@ function update(dt) {
                 let sx = (Math.sin(i * 1234.5) * 0.5 + 0.5) * w; let sy = (Math.cos(i * 5432.1) * 0.5 + 0.5) * horizon;
                 ctx.fillRect(sx, sy, Math.random() > 0.5 ? 2 : 1, Math.random() > 0.5 ? 2 : 1);
             }
+        }
+        
+        // Render Glitch Screen Tearing
+        if (tData.isGlitch && Math.random() < 0.08) {
+            ctx.fillStyle = Math.random() > 0.5 ? "rgba(0, 255, 0, 0.15)" : "rgba(255, 0, 255, 0.15)";
+            ctx.fillRect(0, Math.random() * h, w, Math.random() * 150);
         }
         
         // Render Abyss Bubbles & Tint
@@ -908,6 +937,11 @@ function update(dt) {
                 draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, obj.y);
                 return;
             }
+            if (obj.type === 'phantom') {
+                if (Math.floor(performance.now() / 40) % 2 === 0) return; // Strobe flickering effect
+                draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, {f:"#0f0", t:"#f0f", s:"#0ff", b:"#fff"}, 0);
+                return;
+            }
             let backFace = draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0); 
             draw3DBox(worldX, obj.d + dims.zOff, dims.w * 0.8, dims.hC, dims.lC, {f: "#111", t: "#222", s: "#0a0a0a", b: "#151515"}, dims.hB);
             
@@ -930,9 +964,23 @@ function update(dt) {
                 ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(angle)*length, sy + Math.sin(angle)*length); ctx.stroke();
             }
         }
+
+        // GLITCH UI WARNING
+        if (p1.glitchInverted && Math.floor(performance.now() / 150) % 2 === 0) {
+            ctx.fillStyle = "#ff00ff"; ctx.font = "bold 35px 'Arial Black'"; ctx.textAlign = "center";
+            ctx.fillText("⚠️ SYSTEM GLITCH: CONTROLS INVERTED ⚠️", w/2, 120);
+        }
+
+        // VICTORY FLASH RENDERER
+        if (flashOpacity > 0) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${flashOpacity})`;
+            ctx.fillRect(0, 0, w, h);
+            flashOpacity -= 0.8 * (0.016);
+            if (flashOpacity < 0) flashOpacity = 0;
+        }
+
         ctx.restore();
     }
-
     function loop(t) { 
         if (lastTime === 0) lastTime = t; 
         let dt = (t - lastTime) / 1000; lastTime = t; 
