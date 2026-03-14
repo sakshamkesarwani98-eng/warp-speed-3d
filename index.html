@@ -394,7 +394,12 @@
                         c.lastSeen = Date.now();
                         if (data.type === 'toggle_ready' && !ignitionLocked) { c.isReady = data.isReady; if(!window.isPrivateRoom) checkPublicStartConditions(); broadcastLobbyState(); }
                         if (data.type === 'sync' && window.gameState === 'RACE') { c.dist = data.dist; c.lane = data.lane; c.speed = data.speed; c.isBraking = data.isBraking; if(data.dead && !c.dead) c.dead = true; }
-                        if (data.type === 'crossed_finish_line') { if (!c.dead && c.dist < TOTAL_DIST) { c.dist = TOTAL_DIST; c.finishTime = performance.now(); } }
+                        if (data.type === 'crossed_finish_line') { 
+                            if (!c.dead && c.dist < TOTAL_DIST) { 
+                                c.dist = TOTAL_DIST; c.finishTime = performance.now(); 
+                                checkRaceState(); // Forces the Host to evaluate the win instantly!
+                            } 
+                        }
                     }
                 });
                 conn.on('close', () => {
@@ -606,7 +611,7 @@
 
         if (totalAlive === 0) triggerGlobalFinish("ALL RACERS WRECKED!");
         else if (totalPlayers >= 2 && totalAlive === 1 && totalFinished === 0) { if (myAlive) p1.dist = TOTAL_DIST; else aliveClients[0].dist = TOTAL_DIST; triggerGlobalFinish("SOLE SURVIVOR! ALL OTHERS WRECKED."); } 
-        else if (totalAlive === totalFinished && totalAlive > 0) triggerGlobalFinish("ALL SURVIVORS CROSSED THE LINE!");
+        else if (totalFinished > 0) triggerGlobalFinish("WE HAVE A WINNER!");
     }
 
     function triggerGlobalFinish(reasonStr = "RACE CONCLUDED") {
@@ -729,7 +734,9 @@ function update(dt) {
                 crossTriggered = true; p1.speed = 0; p1.dist = TOTAL_DIST; p1.finishTime = performance.now();
                 if (window.isHost) triggerGlobalFinish(); 
                 else { try { hostConnToLobby.send({type: 'crossed_finish_line'}); } catch(e){} }
-                document.getElementById('mobile-controls').classList.add('hidden'); document.getElementById('hud-speed').innerText = "FINISH";
+                document.getElementById('mobile-controls').classList.add('hidden'); 
+            document.getElementById('hud-speed').innerText = "FINISH";
+            document.getElementById('hud-dist').innerText = TOTAL_DIST; // Forces it to display exactly 10000
             }
         } else {
             let target = clients.find(c => c.id === window.spectatingId);
