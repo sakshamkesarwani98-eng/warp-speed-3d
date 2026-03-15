@@ -867,7 +867,9 @@ function update(dt) {
 
         // RENDER: THE FINAL DESCENT (Earth to Black Hole)
         if (tData.isBlackHole) {
-            let progress = Math.min(1, viewState.dist / tData.dist);
+            // FIX: Safely grab distance without crashing the render loop
+            let renderDist = (p1.dead && window.spectatingId) ? (clients.find(c => c.id === window.spectatingId)?.dist || 0) : p1.dist;
+            let progress = Math.min(1, renderDist / tData.dist);
             
             // Flowing Starfield (Right to Left)
             ctx.fillStyle = "#fff";
@@ -959,20 +961,6 @@ function update(dt) {
             if (pL && pR) { leftPoints.push(pL); rightPoints.push(pR); }
         }
         if (leftPoints.length > 1) {
-            ctx.fillStyle = "#222"; ctx.beginPath();
-            ctx.moveTo(leftPoints[0].x, leftPoints[0].y);
-            for(let i=1; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
-            for(let i=rightPoints.length-1; i>=0; i--) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
-            ctx.fill();
-            
-            ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.moveTo(leftPoints[0].x, leftPoints[0].y);
-            for(let i=1; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
-            ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(rightPoints[0].x, rightPoints[0].y);
-            for(let i=1; i<rightPoints.length; i++) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
-            ctx.stroke();
-        }
 
         let totalCycle = 40; ctx.fillStyle = "#fff";
         for(let z = Math.floor(viewState.dist/totalCycle)*totalCycle; z < viewState.dist + 3500; z += totalCycle) {
