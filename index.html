@@ -933,19 +933,19 @@ function update(dt) {
         ctx.fillStyle = tData.ground; ctx.fillRect(0, horizon, w, h-horizon);
         
         function project(worldX, worldY, worldZ) {
-            let dz = worldZ - viewState.dist; if(dz < -50) return null; 
-            let scale = focalLength / (dz + 180); let camX = (viewState.camLane - 1) * 150; 
+            let dz = worldZ - viewState.dist; if(dz < -120) return null; // Allow rendering to bottom edge
+            let scale = focalLength / (Math.max(1, dz + 180)); // Prevent division crashes
+            let camX = (viewState.camLane - 1) * 150; 
             
-            let vpX = w / 2;
+            let vpX = w / 2; // Keep camera centered on the car
             let vortexCurve = 0;
             let gravityDip = 0;
 
-            // DYNAMIC WARP: Straight at Earth, Spiraling into the Black Hole
+            // DYNAMIC WARP: Progressive bending without shifting the camera base
             if (tData && tData.isBlackHole) {
                 let progress = Math.min(1, viewState.dist / tData.dist);
-                vpX = w * (0.5 - (progress * 0.35));           // Vanishing point slides left
-                vortexCurve = -(dz * dz * 0.00015) * progress; // Road bends massively left
-                gravityDip = (dz * dz * 0.00005) * progress;   // Road tilts downward
+                vortexCurve = -(dz * dz * 0.00012) * progress; // Smooth sweep left
+                gravityDip = (dz * dz * 0.00005) * progress;   
             }
             
             return { 
@@ -954,36 +954,34 @@ function update(dt) {
                 s: scale 
             };
         }
-        // HIGH-FIDELITY ROAD RENDERER (RESTORED & SECURED)
+        // HIGH-FIDELITY ROAD RENDERER (NATURAL CURVE)
         ctx.fillStyle = tData.ground; ctx.fillRect(0, horizon, w, h - horizon); 
         let leftPoints = []; let rightPoints = [];
         let renderStep = (tData && tData.isBlackHole) ? 50 : 150;
         
-        // Z offset pushed to +10 to permanently kill the black strip
-        for(let z = viewState.dist + 10; z < viewState.dist + 3500; z += renderStep) {
-            // Widen the floor to 2000 units so the "edges" stay off-screen
-            let pL = project(-2000, 0, z); let pR = project(2000, 0, z);
+        // Start loop behind camera so the polygon safely bleeds off the bottom screen edge
+        for(let z = viewState.dist - 100; z < viewState.dist + 3500; z += renderStep) {
+            let pL = project(-300, 0, z); let pR = project(300, 0, z); // Normal Track Width
             if (pL && pR && pL.y > horizon && pR.y > horizon) { leftPoints.push(pL); rightPoints.push(pR); }
         }
         
         if (leftPoints.length > 1) {
             ctx.fillStyle = "#222"; ctx.beginPath();
-            // Bottom corners anchored strictly to canvas height (h)
-            ctx.moveTo(leftPoints[0].x, h);
-            for(let i=0; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
+            ctx.moveTo(leftPoints[0].x, leftPoints[0].y);
+            for(let i=1; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
             for(let i=rightPoints.length-1; i>=0; i--) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
-            ctx.lineTo(rightPoints[0].x, h);
+            ctx.lineTo(rightPoints[0].x, rightPoints[0].y);
             ctx.fill();
             
             ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.moveTo(leftPoints[0].x, h);
-            for(let i=0; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
+            ctx.beginPath(); ctx.moveTo(leftPoints[0].x, leftPoints[0].y);
+            for(let i=1; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
             ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(rightPoints[0].x, h);
-            for(let i=0; i<rightPoints.length; i++) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
+            
+            ctx.beginPath(); ctx.moveTo(rightPoints[0].x, rightPoints[0].y);
+            for(let i=1; i<rightPoints.length; i++) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
             ctx.stroke();
         }
-
         let totalCycle = 40; ctx.fillStyle = "#fff";
         for(let z = Math.floor(viewState.dist/totalCycle)*totalCycle; z < viewState.dist + 3500; z += totalCycle) {
             let pL1 = project(-100, 0, z); let pL2 = project(-100, 0, z + 20); let pR1 = project(100, 0, z); let pR2 = project(100, 0, z + 20);
