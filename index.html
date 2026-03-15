@@ -268,7 +268,7 @@
             <option value="3">THE VOLCANIC FORGE</option>
             <option value="4">THE UNDERWATER ABYSS</option>
             <option value="5">THE GLITCH DIMENSION</option>
-            <option value="6">ORBITAL FLIP (GRAVITY)</option>
+            <option value="6">FLIP TRACK</option>
         </select>
         <button class="btn btn-main" onclick="window.hostRoom(null, true)">CREATE LOBBY</button>
         <button class="btn" onclick="window.showScreen('screen-menu')">BACK</button>
@@ -318,7 +318,7 @@
         { id: 3, name: "THE VOLCANIC FORGE", dist: 25000, skyTop: "#300000", skyBot: "#ff4500", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: true },
         { id: 4, name: "THE UNDERWATER ABYSS", dist: 15000, skyTop: "#001a33", skyBot: "#004d99", ground: "#000d1a", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: true },
         { id: 5, name: "THE GLITCH DIMENSION", dist: 20000, skyTop: "#110022", skyBot: "#000000", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: true },
-        { id: 6, name: "ORBITAL FLIP", dist: 24000, skyTop: "#000022", skyBot: "#ff0088", ground: "#111", hasBoost: true, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: false, isGravity: true }
+        { id: 6, name: "FLIP TRACK", dist: 24000, skyTop: "#000022", skyBot: "#ff0088", ground: "#111", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: false, isGravity: true }
     ];
 
     window.updateLobbyTrackPreview = (trackId) => {
