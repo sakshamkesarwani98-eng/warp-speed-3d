@@ -558,14 +558,20 @@
                       for (let lane = 0; lane < 3; lane++) {
                             if (lane === safeLane) continue; 
                             if (Math.random() < 0.4 && (d - lastZ[lane] > 300)) { 
-                                let isSpace = TRACKS[window.activeTrack].isSpace;
-                                let isVolcano = TRACKS[window.activeTrack].isVolcano;
-                                if (isSpace) {
+                                let activeTrack = TRACKS[window.activeTrack];
+                                if (activeTrack.isBlackHole) {
+                                    if (d < TOTAL_DIST) {
+                                        // LANE 0: Death speed. LANE 1: Normal. LANE 2: Slow.
+                                        let speedBase = lane === 0 ? 800 : (lane === 1 ? 400 : 200);
+                                        traffic.push({ d: d, l: lane, s: speedBase, type: 'bh_asteroid', radius: 20 + Math.random() * 60 });
+                                        lastZ[lane] = d;
+                                    }
+                                } else if (activeTrack.isSpace) {
                                     if (d < TOTAL_DIST) { 
                                         traffic.push({ d: d, l: lane, s: 0, type: 'asteroid', col: {f:"#555", t:"#666", s:"#444", b:"#333"}, state: 0, y: 2000 });
                                         lastZ[lane] = d;
                                     }
-                                } else if (isVolcano) {
+                                } else if (activeTrack.isVolcano) {
                                    if (d < TOTAL_DIST) {
                                         let isMagma = (d % 1000 === 50); // Catches 1050, 2050, 3050 exactly!
                                         if (isMagma) traffic.push({ d: d, l: Math.floor(Math.random()*3), s: 0, type: 'magma', col: {f:"#ff2200", t:"#ff4400", s:"#cc1100", b:"#880000"}, state: 0, y: -250 });
@@ -697,9 +703,9 @@ function update(dt) {
             if(leftPressed) p1.lane -= steerSpeed * dt;
             if(rightPressed) p1.lane += steerSpeed * dt;
             
-            // BLACK HOLE PULL: Constant drift towards the inner lane (0)
+            // BLACK HOLE CENTRIFUGAL PULL: Drags you side-to-side as the track spirals
             if (TRACKS[window.activeTrack] && TRACKS[window.activeTrack].isBlackHole) {
-                p1.lane -= 1.0 * dt; 
+                p1.lane -= Math.cos(p1.dist * 0.001) * 1.5 * dt; 
             }
 
             p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
@@ -761,6 +767,8 @@ function update(dt) {
                         let leadDist = p1.dist; clients.forEach(c => { if (!c.dead && c.dist > leadDist) leadDist = c.dist; });
                         if (t.state === 0 && (t.d - leadDist) < 800 && (t.d - leadDist) > 0) t.state = 1;
                         if (t.state === 1) { t.y += 2000 * dt; if (t.y >= 0) { t.y = 0; t.state = 2; } }
+                    } else if (t.type === 'bh_asteroid') {
+                        t.d -= (t.s * 0.277 * 4.0) * dt; // Moving backwards towards player!
                     } else if (t.type !== 'puddle') {
                         t.d += ((t.s * 0.277 * 4.0) * dt); 
                         let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250 && other.type !== 'asteroid' && other.type !== 'magma' && other.type !== 'puddle'); 
@@ -779,6 +787,11 @@ function update(dt) {
                             let isDangerous = (t.type !== 'asteroid' && t.type !== 'magma') || (t.type === 'asteroid' && t.y < 50) || (t.type === 'magma' && t.y > -150);
                             if (isDangerous) localWreck();
                         }
+                    }
+                } else if (t.type === 'bh_asteroid') {
+                    let hitZ = t.radius + (p1.speed * dt * 0.2); 
+                    if(Math.abs(p1.dist - t.d) < hitZ && Math.abs(p1.lane - t.l) < (t.radius/100) && !p1.dead && !crossTriggered) {
+                        localWreck();
                     }
                 }
             });
@@ -892,7 +905,14 @@ function update(dt) {
         function project(worldX, worldY, worldZ) {
             let dz = worldZ - viewState.dist; if(dz < -50) return null; 
             let scale = focalLength / (dz + 180); let camX = (viewState.camLane - 1) * 150; 
-            return { x: w/2 + (worldX - camX)*scale, y: horizon + (worldY + 120)*scale, s: scale };
+            
+            // SPIRAL RENDERING EFFECT
+            let spiralOffset = 0;
+            if (tData && tData.isBlackHole) {
+                spiralOffset = Math.sin(worldZ * 0.001) * Math.min(dz * 0.8, 1200);
+            }
+            
+            return { x: w/2 + (worldX - camX + spiralOffset)*scale, y: horizon + (worldY + 120)*scale, s: scale };
         }
 
         let r1 = project(-300, 0, viewState.dist - 50); let r2 = project(300, 0, viewState.dist - 50); let r3 = project(300, 0, viewState.dist + 3500); let r4 = project(-300, 0, viewState.dist + 3500);
@@ -986,7 +1006,21 @@ function update(dt) {
                 return;
             }
 
-            let worldX = (obj.l - 1) * 150; let dims = V_DIMS[obj.type]; 
+            let worldX = (obj.l - 1) * 150; 
+            
+            // RENDER CIRCULAR FRONT-FACING ASTEROIDS
+            if (obj.type === 'bh_asteroid') {
+                let pC = project(worldX, -obj.radius, obj.d);
+                if (pC) {
+                    ctx.beginPath(); ctx.arc(pC.x, pC.y, obj.radius * pC.s, 0, Math.PI * 2);
+                    let grad = ctx.createRadialGradient(pC.x - (obj.radius*0.3*pC.s), pC.y - (obj.radius*0.3*pC.s), obj.radius*0.1*pC.s, pC.x, pC.y, obj.radius*pC.s);
+                    grad.addColorStop(0, "#777"); grad.addColorStop(1, "#111"); ctx.fillStyle = grad; ctx.fill();
+                    ctx.lineWidth = 2; ctx.strokeStyle = "#a0f"; ctx.stroke();
+                }
+                return;
+            }
+
+            let dims = V_DIMS[obj.type]; 
             if (obj.type === 'asteroid') {
                 let currentY = obj.y || 0;
                 
