@@ -857,7 +857,8 @@ function update(dt) {
             ctx.fillStyle = "#000"; ctx.shadowBlur = 20; ctx.shadowColor = "#fff"; ctx.fill(); ctx.shadowBlur = 0;
         }
         
-        // Render Glitch Screen Tearing        if (tData.isGlitch && Math.random() < 0.08) {
+        // Render Glitch Screen Tearing
+        if (tData.isGlitch && Math.random() < 0.08) {
             ctx.fillStyle = Math.random() > 0.5 ? "rgba(0, 255, 0, 0.15)" : "rgba(255, 0, 255, 0.15)";
             ctx.fillRect(0, Math.random() * h, w, Math.random() * 150);
         }
