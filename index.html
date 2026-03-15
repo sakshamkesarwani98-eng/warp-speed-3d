@@ -564,8 +564,18 @@
                                     // Anti-Wall Mechanic: Max 1 asteroid per row, smaller sizes
                                     if (d < TOTAL_DIST && spawnedThisRow < 1) {
                                         let speedBase = lane === 0 ? 150 : (lane === 1 ? 100 : 50);
-                                        let pts = []; for(let i=0; i<8; i++) pts.push(0.75 + Math.random() * 0.5); // Jagged edges
-                                        traffic.push({ d: d, l: lane, s: speedBase, type: 'bh_asteroid', radius: 15 + Math.random() * 25, pts: pts });
+                                        let pts = []; for(let i=0; i<8; i++) pts.push(0.75 + Math.random() * 0.5); 
+                                        // Generate 0 to 4 random craters per asteroid
+                                        let craters = [];
+                                        let numCraters = Math.floor(Math.random() * 5); 
+                                        for(let i=0; i<numCraters; i++) {
+                                            craters.push({
+                                                x: (Math.random() - 0.5) * 1.4, // Random X offset
+                                                y: (Math.random() - 0.5) * 1.4, // Random Y offset
+                                                r: 0.1 + Math.random() * 0.2    // Random crater size
+                                            });
+                                        }
+                                        traffic.push({ d: d, l: lane, s: speedBase, type: 'bh_asteroid', radius: 15 + Math.random() * 25, pts: pts, craters: craters });
                                         lastZ[lane] = d;
                                         spawnedThisRow++;
                                     }
@@ -895,13 +905,11 @@ function update(dt) {
             // 1. Shattering Earth (Shrinks and disappears by 50% distance)
             if (progress < 0.5) {
                 let eRadius = 250 * (1 - (progress * 2));
-                ctx.beginPath(); ctx.arc(w/2, horizon - 80 + (progress*200), eRadius, 0, Math.PI*2);
-                let eGrad = ctx.createRadialGradient(w/2, horizon - 80, eRadius*0.2, w/2, horizon - 80, eRadius);
+                let currentY = horizon - 80 + (progress*200);
+                ctx.beginPath(); ctx.arc(w/2, currentY, eRadius, 0, Math.PI*2);
+                let eGrad = ctx.createRadialGradient(w/2, currentY - (eRadius*0.2), eRadius*0.2, w/2, currentY, eRadius);
                 eGrad.addColorStop(0, "#2266cc"); eGrad.addColorStop(1, "#001133");
                 ctx.fillStyle = eGrad; ctx.fill();
-                // Magma Cracks on Earth
-                ctx.strokeStyle = "#ff3300"; ctx.lineWidth = 3; ctx.beginPath();
-                ctx.moveTo(w/2 - eRadius*0.5, horizon - 80); ctx.lineTo(w/2 + eRadius*0.4, horizon - 40); ctx.stroke();
             }
 
             // 2. The Black Hole (Anchored to the left)
@@ -1071,12 +1079,15 @@ function update(dt) {
 
             let worldX = (obj.l - 1) * 150; 
             
-            // RENDER NATURAL JAGGED ASTEROIDS
+            // RENDER VOLUMETRIC 3D JAGGED ASTEROIDS
             if (obj.type === 'bh_asteroid') {
-                let pC = project(worldX, -obj.radius, obj.d);
-                if (pC) {
+                // We draw 3 layers to simulate depth
+                for (let layer = 0; layer < 3; layer++) {
+                    let depthOffset = layer * (obj.radius * 0.4);
+                    let pC = project(worldX, -obj.radius + depthOffset, obj.d);
+                    if (!pC) continue;
+
                     ctx.beginPath();
-                    // Draw irregular polygon using generated points
                     for(let i = 0; i < 8; i++) {
                         let angle = (i / 8) * Math.PI * 2;
                         let r = obj.radius * pC.s * (obj.pts ? obj.pts[i] : 1);
@@ -1086,14 +1097,27 @@ function update(dt) {
                     }
                     ctx.closePath();
                     
-                    let grad = ctx.createRadialGradient(pC.x - (obj.radius*0.3*pC.s), pC.y - (obj.radius*0.3*pC.s), obj.radius*0.1*pC.s, pC.x, pC.y, obj.radius*pC.s);
-                    grad.addColorStop(0, "#888"); grad.addColorStop(1, "#222"); ctx.fillStyle = grad; ctx.fill();
-                    ctx.lineWidth = 2; ctx.strokeStyle = "#111"; ctx.stroke();
-                    
-                    // Add crater details
-                    ctx.fillStyle = "#111";
-                    ctx.beginPath(); ctx.arc(pC.x + (obj.radius*0.2*pC.s), pC.y - (obj.radius*0.2*pC.s), obj.radius*0.2*pC.s, 0, Math.PI*2); ctx.fill();
-                    ctx.beginPath(); ctx.arc(pC.x - (obj.radius*0.3*pC.s), pC.y + (obj.radius*0.2*pC.s), obj.radius*0.15*pC.s, 0, Math.PI*2); ctx.fill();
+                    if (layer < 2) {
+                        // Shadow Layers (Thickness)
+                        ctx.fillStyle = layer === 0 ? "#111" : "#333";
+                        ctx.fill();
+                    } else {
+                        // Front Face (Lighting and Craters)
+                        let grad = ctx.createRadialGradient(pC.x - (obj.radius*0.3*pC.s), pC.y - (obj.radius*0.3*pC.s), obj.radius*0.1*pC.s, pC.x, pC.y, obj.radius*pC.s);
+                        grad.addColorStop(0, "#999"); grad.addColorStop(1, "#333");
+                        ctx.fillStyle = grad; ctx.fill();
+                        ctx.lineWidth = 1.5; ctx.strokeStyle = "#111"; ctx.stroke();
+                        
+                        // Random Crater Stamps
+                        if (obj.craters) {
+                            ctx.fillStyle = "rgba(0,0,0,0.4)";
+                            obj.craters.forEach(crater => {
+                                ctx.beginPath();
+                                ctx.arc(pC.x + (crater.x * obj.radius * pC.s), pC.y + (crater.y * obj.radius * pC.s), crater.r * obj.radius * pC.s, 0, Math.PI*2);
+                                ctx.fill();
+                            });
+                        }
+                    }
                 }
                 return;
             }
