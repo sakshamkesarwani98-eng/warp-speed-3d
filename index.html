@@ -395,8 +395,12 @@
                         if (clients.length >= 9) { try { conn.send({type: 'rejected', msg: 'ROOM FULL'}); } catch(e){} setTimeout(()=>conn.close(), 500); return; }
                         if (window.isPrivateRoom && roomPass && data.pass !== roomPass) { try { conn.send({type: 'rejected', msg: 'INVALID PASSWORD'}); } catch(e){} setTimeout(()=>conn.close(), 500); return; }
                         
-                        // GHOST BUSTER: Instantly remove old clones of this user to prevent UI duplication and silent crashes
-                        clients = clients.filter(c => c.name !== data.name);
+                        // STRICT NAME CHECK: Prevent the same user from joining twice from multiple tabs
+                        if (data.name === window.playerName || clients.some(c => c.name === data.name)) {
+                            try { conn.send({type: 'rejected', msg: 'NAME ALREADY IN LOBBY'}); } catch(e){}
+                            setTimeout(()=>conn.close(), 500);
+                            return;
+                        }
                         
                         clients.push({ conn: conn, id: conn.peer, name: data.name, dist: 0, lane: 1, speed: 0, dead: false, isBraking: false, colIdx: clients.length + 1, finishTime: 999999999, lastSeen: Date.now(), isReady: false });
                         try { conn.send({type: 'accepted', colIdx: clients.length, isPrivate: window.isPrivateRoom, trackId: window.activeTrack}); } catch(e){}
