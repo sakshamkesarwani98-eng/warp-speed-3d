@@ -689,8 +689,35 @@ function update(dt) {
                 }
             } else { p1.glitchInverted = false; }
 
-            let topSpeed = p1.turboActive ? 640 : 360;
+            // GRAVITY FLIP & GLITCH CONTROL INVERSION
+            let gravityFlipped = TRACKS[window.activeTrack] && TRACKS[window.activeTrack].isGravity && (Math.floor(p1.dist / 4000) % 2 !== 0);
+            if (p1.glitchInverted || gravityFlipped) { 
+                let temp = leftPressed; leftPressed = rightPressed; rightPressed = temp; 
+            }
+            if(leftPressed) p1.lane -= steerSpeed * dt;
+            if(rightPressed) p1.lane += steerSpeed * dt;
+            
+            // BLACK HOLE PULL: Constant drift towards the inner lane (0)
+            if (TRACKS[window.activeTrack] && TRACKS[window.activeTrack].isBlackHole) {
+                p1.lane -= 1.0 * dt; 
+            }
+
+            p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
+
+            p1.isBraking = keys['KeyS'] || keys['ArrowDown']; let gasPressed = keys['KeyW'] || keys['ArrowUp'];
+            
+            if (crossTriggered) {
+                p1.speed = 0;
+                p1.turboActive = false;
+            } else if (p1.isBraking) { 
+                p1.turboActive = false; p1.speed = Math.max(0, p1.speed - 800 * dt); 
+            } else {
+                if (keys['ShiftLeft'] && p1.speed > 80 && p1.nitro > 0) { if (!p1.turboActive && p1.nitro > 20) p1.turboActive = true; } else p1.turboActive = false;
+                if (p1.turboActive) { p1.nitro -= 16.5 * dt; if (p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; } } else if (p1.nitro < 100) p1.nitro += 15 * dt;
+                
+                let topSpeed = p1.turboActive ? 640 : 360;
                 let activeTrackData = TRACKS[window.activeTrack];
+                
                 if (activeTrackData && activeTrackData.isVolcano) {
                     if (gasPressed && !crossTriggered) p1.heat += 12 * dt;
                     if (p1.isBraking) p1.heat -= 80 * dt;
@@ -705,27 +732,6 @@ function update(dt) {
                     else if (p1.lane > 1.5) topSpeed *= 0.80; // 20% Penalty in the safe zone
                 }
                 
-                let accelRate = (activeTrackData && activeTrackData.isAbyss) ? 150 : 300;
-            p1.isBraking = keys['KeyS'] || keys['ArrowDown']; let gasPressed = keys['KeyW'] || keys['ArrowUp'];
-            
-            if (crossTriggered) {
-                p1.speed = 0;
-                p1.turboActive = false;
-            } else if (p1.isBraking) { 
-                p1.turboActive = false; p1.speed = Math.max(0, p1.speed - 800 * dt); 
-            } else {
-                if (keys['ShiftLeft'] && p1.speed > 80 && p1.nitro > 0) { if (!p1.turboActive && p1.nitro > 20) p1.turboActive = true; } else p1.turboActive = false;
-                if (p1.turboActive) { p1.nitro -= 16.5 * dt; if (p1.nitro <= 0) { p1.nitro = 0; p1.turboActive = false; } } else if (p1.nitro < 100) p1.nitro += 15 * dt;
-                let topSpeed = p1.turboActive ? 640 : 360;
-                let activeTrackData = TRACKS[window.activeTrack];
-                if (activeTrackData && activeTrackData.isVolcano) {
-                    if (gasPressed && !crossTriggered) p1.heat += 12 * dt;
-                    if (p1.isBraking) p1.heat -= 80 * dt;
-                    if (!gasPressed && !p1.isBraking) p1.heat -= 25 * dt;
-                    p1.heat = Math.max(0, Math.min(100, p1.heat));
-                    if (p1.heat > 90) topSpeed = 200; // Engine Overheat Penalty
-                }
-                
                 let accelRate = (activeTrackData && activeTrackData.isAbyss) ? 150 : 300; 
                 let friction = (activeTrackData && activeTrackData.isAbyss) ? 120 : 80;
 
@@ -733,9 +739,7 @@ function update(dt) {
                     if (p1.speed <= topSpeed) p1.speed = Math.min(topSpeed, p1.speed + accelRate * dt);
                     else p1.speed = Math.max(topSpeed, p1.speed - 150 * dt);
                 } else p1.speed = Math.max(0, p1.speed - friction * dt);
-            }
-            
-            let prevDist = p1.dist;
+            }            let prevDist = p1.dist;
             if (!crossTriggered) {
                 p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
                 let activeTrackData = TRACKS[window.activeTrack];
