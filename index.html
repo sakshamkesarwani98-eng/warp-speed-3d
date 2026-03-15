@@ -954,14 +954,34 @@ function update(dt) {
                 s: scale 
             };
         }
-        // HIGH-FIDELITY ROAD RENDERER
+        // HIGH-FIDELITY ROAD RENDERER (RESTORED & SECURED)
+        ctx.fillStyle = tData.ground; ctx.fillRect(0, horizon, w, h - horizon); 
         let leftPoints = []; let rightPoints = [];
-        let renderStep = (tData && tData.isBlackHole) ? 50 : 150; // Smooth curve for orbit
-        for(let z = viewState.dist - 50; z < viewState.dist + 3500; z += renderStep) {
+        let renderStep = (tData && tData.isBlackHole) ? 50 : 150;
+        
+        // Z offset pushed to +10 to permanently kill the black strip
+        for(let z = viewState.dist + 10; z < viewState.dist + 3500; z += renderStep) {
             let pL = project(-300, 0, z); let pR = project(300, 0, z);
-            if (pL && pR) { leftPoints.push(pL); rightPoints.push(pR); }
+            if (pL && pR && pL.y > horizon && pR.y > horizon) { leftPoints.push(pL); rightPoints.push(pR); }
         }
+        
         if (leftPoints.length > 1) {
+            ctx.fillStyle = "#222"; ctx.beginPath();
+            // Bottom corners anchored strictly to canvas height (h)
+            ctx.moveTo(leftPoints[0].x, h);
+            for(let i=0; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
+            for(let i=rightPoints.length-1; i>=0; i--) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
+            ctx.lineTo(rightPoints[0].x, h);
+            ctx.fill();
+            
+            ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(leftPoints[0].x, h);
+            for(let i=0; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
+            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(rightPoints[0].x, h);
+            for(let i=0; i<rightPoints.length; i++) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
+            ctx.stroke();
+        }
 
         let totalCycle = 40; ctx.fillStyle = "#fff";
         for(let z = Math.floor(viewState.dist/totalCycle)*totalCycle; z < viewState.dist + 3500; z += totalCycle) {
