@@ -703,9 +703,9 @@ function update(dt) {
             if(leftPressed) p1.lane -= steerSpeed * dt;
             if(rightPressed) p1.lane += steerSpeed * dt;
             
-            // BLACK HOLE CENTRIFUGAL PULL: Drags you side-to-side as the track spirals
+            // BLACK HOLE EVENT HORIZON PULL: Constantly drags you left into the void
             if (TRACKS[window.activeTrack] && TRACKS[window.activeTrack].isBlackHole) {
-                p1.lane -= Math.cos(p1.dist * 0.001) * 1.5 * dt; 
+                p1.lane -= 0.8 * dt; 
             }
 
             p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
@@ -863,15 +863,30 @@ function update(dt) {
             }
         }
 
-        // Render Black Hole Singularity
+        // Render Event Horizon (Side View)
         if (tData.isBlackHole) {
-            let cx = w / 2; let cy = horizon * 0.35;
-            // Accretion Disk
-            ctx.beginPath(); ctx.ellipse(cx, cy, 200, 30, (performance.now()*0.001) % (Math.PI*2), 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(150, 0, 255, 0.4)"; ctx.shadowBlur = 40; ctx.shadowColor = "#a0f"; ctx.fill();
-            // Event Horizon
-            ctx.beginPath(); ctx.arc(cx, cy, 60, 0, Math.PI * 2);
-            ctx.fillStyle = "#000"; ctx.shadowBlur = 20; ctx.shadowColor = "#fff"; ctx.fill(); ctx.shadowBlur = 0;
+            let cx = w * 0.15; let cy = horizon * 0.6; // Anchored to the far left
+            
+            // Flowing Starfield (Right to Left)
+            ctx.fillStyle = "#fff";
+            for(let i=0; i<80; i++) {
+                let speed = 0.05 + (i%5)*0.05;
+                let sx = ( (Math.sin(i * 123.45) * w) - (performance.now() * speed) ) % w;
+                if (sx < 0) sx += w;
+                let sy = (Math.cos(i * 543.21) * 0.5 + 0.5) * h;
+                ctx.fillRect(sx, sy, Math.random() > 0.5 ? 2 : 1, Math.random() > 0.5 ? 2 : 1);
+            }
+
+            // Distant Dead Planet
+            ctx.beginPath(); ctx.arc(w * 0.8, horizon * 0.3, 80, 0, Math.PI * 2);
+            let pGrad = ctx.createRadialGradient(w*0.8 - 20, horizon*0.3 - 20, 10, w*0.8, horizon*0.3, 80);
+            pGrad.addColorStop(0, "#444"); pGrad.addColorStop(1, "#000"); ctx.fillStyle = pGrad; ctx.fill();
+
+            // Black Hole Singularity
+            ctx.beginPath(); ctx.ellipse(cx, cy, 300, 80, (performance.now()*0.001) % (Math.PI*2), 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(120, 0, 255, 0.3)"; ctx.shadowBlur = 60; ctx.shadowColor = "#a0f"; ctx.fill();
+            ctx.beginPath(); ctx.arc(cx, cy, 100, 0, Math.PI * 2);
+            ctx.fillStyle = "#000"; ctx.shadowBlur = 30; ctx.shadowColor = "#fff"; ctx.fill(); ctx.shadowBlur = 0;
         }
         
         // Render Glitch Screen Tearing
@@ -906,13 +921,22 @@ function update(dt) {
             let dz = worldZ - viewState.dist; if(dz < -50) return null; 
             let scale = focalLength / (dz + 180); let camX = (viewState.camLane - 1) * 150; 
             
-            // SPIRAL RENDERING EFFECT
-            let spiralOffset = 0;
+            let vpX = w / 2; // Default center
+            let vortexCurve = 0;
+            let gravityDip = 0;
+
+            // EVENT HORIZON 3D WARP
             if (tData && tData.isBlackHole) {
-                spiralOffset = Math.sin(worldZ * 0.0015) * Math.min(dz * 0.8, 1500); 
+                vpX = w * 0.15; // Shift Vanishing Point to the left singularity
+                vortexCurve = -(dz * dz * 0.00015); // Severe curve bending left into the hole
+                gravityDip = (dz * dz * 0.00005);   // Track tilts downwards into the void
             }
             
-            return { x: w/2 + (worldX - camX + spiralOffset)*scale, y: horizon + (worldY + 120)*scale, s: scale };
+            return { 
+                x: vpX + (worldX - camX + vortexCurve) * scale, 
+                y: horizon + (worldY + 120 + gravityDip) * scale, 
+                s: scale 
+            };
         }
 
         // DYNAMIC CURVED ROAD RENDERER
