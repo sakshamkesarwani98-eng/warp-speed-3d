@@ -561,8 +561,8 @@
                                 let activeTrack = TRACKS[window.activeTrack];
                                 if (activeTrack.isBlackHole) {
                                     if (d < TOTAL_DIST) {
-                                        // LANE 0: 400. LANE 1: 200. LANE 2: 100.
-                                        let speedBase = lane === 0 ? 400 : (lane === 1 ? 200 : 100);
+                                        // LANE 0: 200. LANE 1: 100. LANE 2: 50.
+                                        let speedBase = lane === 0 ? 200 : (lane === 1 ? 100 : 50);
                                         traffic.push({ d: d, l: lane, s: speedBase, type: 'bh_asteroid', radius: 20 + Math.random() * 60 });
                                         lastZ[lane] = d;
                                     }
@@ -909,17 +909,32 @@ function update(dt) {
             // SPIRAL RENDERING EFFECT
             let spiralOffset = 0;
             if (tData && tData.isBlackHole) {
-                // Multiplied by 3000 to make the curve massive
-                spiralOffset = Math.sin(worldZ * 0.002) * 3000; 
+                spiralOffset = Math.sin(worldZ * 0.0015) * Math.min(dz * 0.8, 1500); 
             }
             
             return { x: w/2 + (worldX - camX + spiralOffset)*scale, y: horizon + (worldY + 120)*scale, s: scale };
         }
 
-        let r1 = project(-300, 0, viewState.dist - 50); let r2 = project(300, 0, viewState.dist - 50); let r3 = project(300, 0, viewState.dist + 3500); let r4 = project(-300, 0, viewState.dist + 3500);
-        if(r1 && r3) {
-            ctx.fillStyle = "#222"; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.lineTo(r4.x, horizon); ctx.fill();
-            ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(r1.x, h); ctx.lineTo(r4.x, horizon); ctx.stroke(); ctx.beginPath(); ctx.moveTo(r2.x, h); ctx.lineTo(r3.x, horizon); ctx.stroke();
+        // DYNAMIC CURVED ROAD RENDERER
+        let leftPoints = []; let rightPoints = [];
+        for(let z = viewState.dist - 50; z < viewState.dist + 3500; z += 150) {
+            let pL = project(-300, 0, z); let pR = project(300, 0, z);
+            if (pL && pR) { leftPoints.push(pL); rightPoints.push(pR); }
+        }
+        if (leftPoints.length > 1) {
+            ctx.fillStyle = "#222"; ctx.beginPath();
+            ctx.moveTo(leftPoints[0].x, leftPoints[0].y);
+            for(let i=1; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
+            for(let i=rightPoints.length-1; i>=0; i--) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
+            ctx.fill();
+            
+            ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(leftPoints[0].x, leftPoints[0].y);
+            for(let i=1; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
+            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(rightPoints[0].x, rightPoints[0].y);
+            for(let i=1; i<rightPoints.length; i++) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
+            ctx.stroke();
         }
 
         let totalCycle = 40; ctx.fillStyle = "#fff";
@@ -1015,9 +1030,9 @@ function update(dt) {
                 if (pC) {
                     ctx.beginPath(); ctx.arc(pC.x, pC.y, obj.radius * pC.s, 0, Math.PI * 2);
                     let grad = ctx.createRadialGradient(pC.x - (obj.radius*0.3*pC.s), pC.y - (obj.radius*0.3*pC.s), obj.radius*0.1*pC.s, pC.x, pC.y, obj.radius*pC.s);
-                    // NEW GREY PALETTE
-                    grad.addColorStop(0, "#999"); grad.addColorStop(1, "#444"); ctx.fillStyle = grad; ctx.fill();
-                    ctx.lineWidth = 2; ctx.strokeStyle = "#222"; ctx.stroke();
+                    // TRUE STONE GREY PALETTE
+                    grad.addColorStop(0, "#888"); grad.addColorStop(1, "#222"); ctx.fillStyle = grad; ctx.fill();
+                    ctx.lineWidth = 2; ctx.strokeStyle = "#111"; ctx.stroke();
                 }
                 return;
             }
