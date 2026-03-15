@@ -978,31 +978,33 @@ function update(dt) {
                 s: scale 
             };
         }
-        // HIGH-FIDELITY ROAD RENDERER (NATURAL CURVE)
+        // HIGH-FIDELITY ROAD RENDERER (FLARED ANCHORS)
         ctx.fillStyle = tData.ground; ctx.fillRect(0, horizon, w, h - horizon); 
         let leftPoints = []; let rightPoints = [];
         let renderStep = (tData && tData.isBlackHole) ? 50 : 150;
         
-        // Start loop behind camera so the polygon safely bleeds off the bottom screen edge
         for(let z = viewState.dist - 100; z < viewState.dist + 3500; z += renderStep) {
-            let pL = project(-300, 0, z); let pR = project(300, 0, z); // Normal Track Width
+            let pL = project(-300, 0, z); let pR = project(300, 0, z); 
             if (pL && pR && pL.y > horizon && pR.y > horizon) { leftPoints.push(pL); rightPoints.push(pR); }
         }
         
         if (leftPoints.length > 1) {
             ctx.fillStyle = "#222"; ctx.beginPath();
-            ctx.moveTo(leftPoints[0].x, leftPoints[0].y);
+            // Flare out the absolute bottom corners off-screen so it NEVER floats
+            ctx.moveTo(leftPoints[0].x - (w*2), h); 
+            ctx.lineTo(leftPoints[0].x, leftPoints[0].y);
             for(let i=1; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
             for(let i=rightPoints.length-1; i>=0; i--) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
             ctx.lineTo(rightPoints[0].x, rightPoints[0].y);
+            ctx.lineTo(rightPoints[0].x + (w*2), h);
             ctx.fill();
             
             ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.moveTo(leftPoints[0].x, leftPoints[0].y);
+            ctx.beginPath(); ctx.moveTo(leftPoints[0].x - (w*2), h); ctx.lineTo(leftPoints[0].x, leftPoints[0].y);
             for(let i=1; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
             ctx.stroke();
             
-            ctx.beginPath(); ctx.moveTo(rightPoints[0].x, rightPoints[0].y);
+            ctx.beginPath(); ctx.moveTo(rightPoints[0].x + (w*2), h); ctx.lineTo(rightPoints[0].x, rightPoints[0].y);
             for(let i=1; i<rightPoints.length; i++) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
             ctx.stroke();
         }
@@ -1095,6 +1097,8 @@ function update(dt) {
             
             // RENDER TRUE 3D PROJECTED ASTEROIDS
             if (obj.type === 'bh_asteroid') {
+                if (!obj.mesh || !obj.mesh.v || !obj.mesh.f) return; // 🛡️ ANTI-BSOD NETWORK SHIELD
+                
                 // Calculate Tumbling Rotation Math
                 let rotX = (performance.now() * 0.001) + obj.d * 0.01;
                 let rotY = (performance.now() * 0.0013) + obj.d * 0.01;
