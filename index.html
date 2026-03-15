@@ -561,8 +561,8 @@
                                 let activeTrack = TRACKS[window.activeTrack];
                                 if (activeTrack.isBlackHole) {
                                     if (d < TOTAL_DIST) {
-                                        // LANE 0: Death speed. LANE 1: Normal. LANE 2: Slow.
-                                        let speedBase = lane === 0 ? 800 : (lane === 1 ? 400 : 200);
+                                        // LANE 0: 400. LANE 1: 200. LANE 2: 100.
+                                        let speedBase = lane === 0 ? 400 : (lane === 1 ? 200 : 100);
                                         traffic.push({ d: d, l: lane, s: speedBase, type: 'bh_asteroid', radius: 20 + Math.random() * 60 });
                                         lastZ[lane] = d;
                                     }
@@ -909,7 +909,8 @@ function update(dt) {
             // SPIRAL RENDERING EFFECT
             let spiralOffset = 0;
             if (tData && tData.isBlackHole) {
-                spiralOffset = Math.sin(worldZ * 0.001) * Math.min(dz * 0.8, 1200);
+                // Multiplied by 3000 to make the curve massive
+                spiralOffset = Math.sin(worldZ * 0.002) * 3000; 
             }
             
             return { x: w/2 + (worldX - camX + spiralOffset)*scale, y: horizon + (worldY + 120)*scale, s: scale };
@@ -1014,8 +1015,9 @@ function update(dt) {
                 if (pC) {
                     ctx.beginPath(); ctx.arc(pC.x, pC.y, obj.radius * pC.s, 0, Math.PI * 2);
                     let grad = ctx.createRadialGradient(pC.x - (obj.radius*0.3*pC.s), pC.y - (obj.radius*0.3*pC.s), obj.radius*0.1*pC.s, pC.x, pC.y, obj.radius*pC.s);
-                    grad.addColorStop(0, "#777"); grad.addColorStop(1, "#111"); ctx.fillStyle = grad; ctx.fill();
-                    ctx.lineWidth = 2; ctx.strokeStyle = "#a0f"; ctx.stroke();
+                    // NEW GREY PALETTE
+                    grad.addColorStop(0, "#999"); grad.addColorStop(1, "#444"); ctx.fillStyle = grad; ctx.fill();
+                    ctx.lineWidth = 2; ctx.strokeStyle = "#222"; ctx.stroke();
                 }
                 return;
             }
