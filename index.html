@@ -269,6 +269,7 @@
             <option value="4">THE UNDERWATER ABYSS</option>
             <option value="5">THE GLITCH DIMENSION</option>
             <option value="6">FLIP TRACK</option>
+            <option value="7">BLACK HOLE SPIRAL</option>
         </select>
         <button class="btn btn-main" onclick="window.hostRoom(null, true)">CREATE LOBBY</button>
         <button class="btn" onclick="window.showScreen('screen-menu')">BACK</button>
@@ -318,7 +319,8 @@
         { id: 3, name: "THE VOLCANIC FORGE", dist: 25000, skyTop: "#300000", skyBot: "#ff4500", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: true },
         { id: 4, name: "THE UNDERWATER ABYSS", dist: 15000, skyTop: "#001a33", skyBot: "#004d99", ground: "#000d1a", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: true },
         { id: 5, name: "THE GLITCH DIMENSION", dist: 20000, skyTop: "#110022", skyBot: "#000000", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: true },
-        { id: 6, name: "FLIP TRACK", dist: 24000, skyTop: "#000022", skyBot: "#ff0088", ground: "#111", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: false, isGravity: true }
+        { id: 6, name: "FLIP TRACK", dist: 24000, skyTop: "#000022", skyBot: "#ff0088", ground: "#111", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: false, isGravity: true },
+        { id: 7, name: "BLACK HOLE SPIRAL", dist: 25000, skyTop: "#000000", skyBot: "#110033", ground: "#050011", hasBoost: false, isSpace: true, isVolcano: false, isAbyss: false, isGlitch: false, isGravity: false, isBlackHole: true }
     ];
 
     window.updateLobbyTrackPreview = (trackId) => {
@@ -687,15 +689,23 @@ function update(dt) {
                 }
             } else { p1.glitchInverted = false; }
 
-            // GRAVITY FLIP & GLITCH CONTROL INVERSION
-            let gravityFlipped = TRACKS[window.activeTrack] && TRACKS[window.activeTrack].isGravity && (Math.floor(p1.dist / 4000) % 2 !== 0);
-            if (p1.glitchInverted || gravityFlipped) { 
-                let temp = leftPressed; leftPressed = rightPressed; rightPressed = temp; 
-            }
-            if(leftPressed) p1.lane -= steerSpeed * dt;
-            if(rightPressed) p1.lane += steerSpeed * dt;
-            p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
+            let topSpeed = p1.turboActive ? 640 : 360;
+                let activeTrackData = TRACKS[window.activeTrack];
+                if (activeTrackData && activeTrackData.isVolcano) {
+                    if (gasPressed && !crossTriggered) p1.heat += 12 * dt;
+                    if (p1.isBraking) p1.heat -= 80 * dt;
+                    if (!gasPressed && !p1.isBraking) p1.heat -= 25 * dt;
+                    p1.heat = Math.max(0, Math.min(100, p1.heat));
+                    if (p1.heat > 90) topSpeed = 200; // Engine Overheat Penalty
+                }
 
+                // BLACK HOLE SPEED MODIFIER: Inner lane is faster, outer is slower
+                if (activeTrackData && activeTrackData.isBlackHole) {
+                    if (p1.lane < 0.8) topSpeed *= 1.30;      // 30% Boost in the danger zone
+                    else if (p1.lane > 1.5) topSpeed *= 0.80; // 20% Penalty in the safe zone
+                }
+                
+                let accelRate = (activeTrackData && activeTrackData.isAbyss) ? 150 : 300;
             p1.isBraking = keys['KeyS'] || keys['ArrowDown']; let gasPressed = keys['KeyW'] || keys['ArrowUp'];
             
             if (crossTriggered) {
@@ -835,9 +845,19 @@ function update(dt) {
                 ctx.fillRect(sx, sy, Math.random() > 0.5 ? 2 : 1, Math.random() > 0.5 ? 2 : 1);
             }
         }
+
+        // Render Black Hole Singularity
+        if (tData.isBlackHole) {
+            let cx = w / 2; let cy = horizon * 0.35;
+            // Accretion Disk
+            ctx.beginPath(); ctx.ellipse(cx, cy, 200, 30, (performance.now()*0.001) % (Math.PI*2), 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(150, 0, 255, 0.4)"; ctx.shadowBlur = 40; ctx.shadowColor = "#a0f"; ctx.fill();
+            // Event Horizon
+            ctx.beginPath(); ctx.arc(cx, cy, 60, 0, Math.PI * 2);
+            ctx.fillStyle = "#000"; ctx.shadowBlur = 20; ctx.shadowColor = "#fff"; ctx.fill(); ctx.shadowBlur = 0;
+        }
         
-        // Render Glitch Screen Tearing
-        if (tData.isGlitch && Math.random() < 0.08) {
+        // Render Glitch Screen Tearing        if (tData.isGlitch && Math.random() < 0.08) {
             ctx.fillStyle = Math.random() > 0.5 ? "rgba(0, 255, 0, 0.15)" : "rgba(255, 0, 255, 0.15)";
             ctx.fillRect(0, Math.random() * h, w, Math.random() * 150);
         }
