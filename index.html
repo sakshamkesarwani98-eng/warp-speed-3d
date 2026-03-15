@@ -792,15 +792,13 @@ function update(dt) {
                     if (t.type === 'asteroid') {
                         let leadDist = p1.dist; clients.forEach(c => { if (!c.dead && c.dist > leadDist) leadDist = c.dist; });
                         if (t.state === 0 && (t.d - leadDist) < 1200 && (t.d - leadDist) > 0) t.state = 1; 
-                        // Doubled drop speed to 7000 so it still hits the track at the perfect moment
                         if (t.state === 1) { t.y -= 7000 * dt; if (t.y <= 0) { t.y = 0; t.state = 2; } }
-                    }
                     } else if (t.type === 'magma') {
                         let leadDist = p1.dist; clients.forEach(c => { if (!c.dead && c.dist > leadDist) leadDist = c.dist; });
                         if (t.state === 0 && (t.d - leadDist) < 800 && (t.d - leadDist) > 0) t.state = 1;
                         if (t.state === 1) { t.y += 2000 * dt; if (t.y >= 0) { t.y = 0; t.state = 2; } }
                     } else if (t.type === 'bh_asteroid') {
-                        t.d -= (t.s * 0.277 * 4.0) * dt; // Moving backwards towards player!
+                        t.d -= (t.s * 0.277 * 4.0) * dt; 
                     } else if (t.type !== 'puddle') {
                         t.d += ((t.s * 0.277 * 4.0) * dt); 
                         let carAhead = traffic.find(other => other.l === t.l && other.d > t.d && (other.d - t.d) < 250 && other.type !== 'asteroid' && other.type !== 'magma' && other.type !== 'puddle'); 
@@ -982,38 +980,38 @@ function update(dt) {
                 s: scale 
             };
         }
-        // HIGH-FIDELITY ROAD RENDERER (FLARED ANCHORS)
+        // HIGH-FIDELITY ROAD RENDERER (NATURAL CURVE)
         ctx.fillStyle = tData.ground; ctx.fillRect(0, horizon, w, h - horizon); 
         let leftPoints = []; let rightPoints = [];
         let renderStep = (tData && tData.isBlackHole) ? 50 : 150;
         
-        for(let z = viewState.dist - 100; z < viewState.dist + 3500; z += renderStep) {
+        // Start from -120 to guarantee the track safely bleeds off the bottom of the screen
+        for(let z = viewState.dist - 120; z < viewState.dist + 3500; z += renderStep) {
             let pL = project(-300, 0, z); let pR = project(300, 0, z); 
             if (pL && pR && pL.y > horizon && pR.y > horizon) { leftPoints.push(pL); rightPoints.push(pR); }
         }
         
         if (leftPoints.length > 1) {
             ctx.fillStyle = "#222"; ctx.beginPath();
-            // Flare out the absolute bottom corners off-screen so it NEVER floats
-            ctx.moveTo(leftPoints[0].x - (w*2), h); 
-            ctx.lineTo(leftPoints[0].x, leftPoints[0].y);
+            ctx.moveTo(leftPoints[0].x, leftPoints[0].y);
             for(let i=1; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
             for(let i=rightPoints.length-1; i>=0; i--) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
             ctx.lineTo(rightPoints[0].x, rightPoints[0].y);
-            ctx.lineTo(rightPoints[0].x + (w*2), h);
             ctx.fill();
             
             ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.moveTo(leftPoints[0].x - (w*2), h); ctx.lineTo(leftPoints[0].x, leftPoints[0].y);
+            ctx.beginPath(); ctx.moveTo(leftPoints[0].x, leftPoints[0].y);
             for(let i=1; i<leftPoints.length; i++) ctx.lineTo(leftPoints[i].x, leftPoints[i].y);
             ctx.stroke();
             
-            ctx.beginPath(); ctx.moveTo(rightPoints[0].x + (w*2), h); ctx.lineTo(rightPoints[0].x, rightPoints[0].y);
+            ctx.beginPath(); ctx.moveTo(rightPoints[0].x, rightPoints[0].y);
             for(let i=1; i<rightPoints.length; i++) ctx.lineTo(rightPoints[i].x, rightPoints[i].y);
             ctx.stroke();
         }
+
+        // Draw dashed lane dividers starting safely off-screen
         let totalCycle = 40; ctx.fillStyle = "#fff";
-        for(let z = Math.floor(viewState.dist/totalCycle)*totalCycle; z < viewState.dist + 3500; z += totalCycle) {
+        for(let z = Math.floor((viewState.dist - 120)/totalCycle)*totalCycle; z < viewState.dist + 3500; z += totalCycle) {
             let pL1 = project(-100, 0, z); let pL2 = project(-100, 0, z + 20); let pR1 = project(100, 0, z); let pR2 = project(100, 0, z + 20);
             if (pL1 && pL2 && pL1.y > horizon) { ctx.beginPath(); ctx.moveTo(pL1.x - 2*pL1.s, pL1.y); ctx.lineTo(pL1.x + 2*pL1.s, pL1.y); ctx.lineTo(pL2.x + 2*pL2.s, pL2.y); ctx.lineTo(pL2.x - 2*pL2.s, pL2.y); ctx.fill(); }
             if (pR1 && pR2 && pR1.y > horizon) { ctx.beginPath(); ctx.moveTo(pR1.x - 2*pR1.s, pR1.y); ctx.lineTo(pR1.x + 2*pR1.s, pR1.y); ctx.lineTo(pR2.x + 2*pR2.s, pR2.y); ctx.lineTo(pR2.x - 2*pR2.s, pR2.y); ctx.fill(); }
