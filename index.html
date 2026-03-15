@@ -961,7 +961,8 @@ function update(dt) {
         
         // Z offset pushed to +10 to permanently kill the black strip
         for(let z = viewState.dist + 10; z < viewState.dist + 3500; z += renderStep) {
-            let pL = project(-300, 0, z); let pR = project(300, 0, z);
+            // Widen the floor to 2000 units so the "edges" stay off-screen
+            let pL = project(-2000, 0, z); let pR = project(2000, 0, z);
             if (pL && pR && pL.y > horizon && pR.y > horizon) { leftPoints.push(pL); rightPoints.push(pR); }
         }
         
