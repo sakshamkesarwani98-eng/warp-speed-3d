@@ -283,6 +283,12 @@
     <div id="screen-lobby" class="screen hidden">
         <h2 id="lobby-code-display" style="font-size:3.5rem; color:#00ffcc;">ROOM: ---</h2>
         <p id="lobby-status" style="color:#ccc; margin-bottom: 10px;"></p>
+        
+        <div id="lobby-track-preview" style="text-align: center; margin: 10px 0; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; border: 1px solid #444;">
+            <img id="lobby-track-img" src="" alt="Track Preview" style="width: 100%; max-width: 300px; height: 120px; object-fit: cover; border-radius: 4px; border: 1px solid #ff4444; margin-bottom: 5px;">
+            <h3 id="lobby-track-name" style="color: #FFD700; margin: 0; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px;">SELECTING TRACK...</h3>
+        </div>
+
         <h3 id="auto-start-display" style="color:#ff4444; font-size:1.5rem; margin-bottom: 5px;" class="hidden">AUTO-START IN: 30s</h3>
         <div id="lobby-grid"></div>
         <button id="btn-toggle-ready" class="btn btn-main" style="width: 200px; margin-top: 20px; transition: background 0.2s;" onclick="window.toggleReady()">READY</button>
@@ -312,6 +318,16 @@
         { id: 4, name: "THE UNDERWATER ABYSS", dist: 15000, skyTop: "#001a33", skyBot: "#004d99", ground: "#000d1a", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: true },
         { id: 5, name: "THE GLITCH DIMENSION", dist: 20000, skyTop: "#110022", skyBot: "#000000", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: true }
     ];
+
+    window.updateLobbyTrackPreview = (trackId) => {
+        const track = TRACKS[trackId];
+        const imgEl = document.getElementById('lobby-track-img');
+        const nameEl = document.getElementById('lobby-track-name');
+        
+        // This will look for images named track0.png, track1.png, etc. in an "assets" folder
+        if(imgEl) imgEl.src = "assets/track" + trackId + ".png"; 
+        if(nameEl) nameEl.innerText = track ? track.name : "UNKNOWN TRACK";
+    };
 
     let peer = null, roomCode = "", roomPass = "", myPeerId = "";
     let clients = [], hostConnToLobby = null, raceFinished = false, crossTriggered = false; 
@@ -373,6 +389,7 @@
             peer.on('open', (id) => {
                 window.isHost = true; myPeerId = id; clients = []; raceFinished = false; ignitionLocked = false; p1.isReady = false; window.gameState = 'LOBBY';
                 window.showScreen('screen-lobby'); applyLobbyUIMode(); updateReadyButtonUI(); 
+                window.updateLobbyTrackPreview(window.activeTrack);
                 document.getElementById('lobby-code-display').innerText = "ROOM: " + roomCode;
                 document.getElementById('lobby-status').innerText = isPrivate ? "PRIVATE LOBBY" : "PUBLIC MATCHMAKING";
                 window.lobbyPlayers = [{ id: myPeerId, name: window.playerName, isReady: p1.isReady, isHost: true }];
@@ -455,7 +472,7 @@
                 });
                 
                 hostConnToLobby.on('data', data => {
-                    if(data.type === 'rejected') { alert(data.msg); if(isAutoFailover) { window.leaveLobby(); window.hostRoom(roomCode, false); } else window.leaveLobby(); }if(data.type === 'accepted') { window.gameState = 'LOBBY'; p1.colIdx = data.colIdx; window.isPrivateRoom = data.isPrivate; window.activeTrack = data.trackId || 0; TOTAL_DIST = TRACKS[window.activeTrack].dist; window.showScreen('screen-lobby'); applyLobbyUIMode(); updateReadyButtonUI(); document.getElementById('lobby-code-display').innerText = "ROOM: " + roomCode; }
+                    if(data.type === 'rejected') { alert(data.msg); if(isAutoFailover) { window.leaveLobby(); window.hostRoom(roomCode, false); } else window.leaveLobby(); }if(data.type === 'accepted') { window.gameState = 'LOBBY'; p1.colIdx = data.colIdx; window.isPrivateRoom = data.isPrivate; window.activeTrack = data.trackId || 0; TOTAL_DIST = TRACKS[window.activeTrack].dist; window.showScreen('screen-lobby'); applyLobbyUIMode(); updateReadyButtonUI(); window.updateLobbyTrackPreview(window.activeTrack); document.getElementById('lobby-code-display').innerText = "ROOM: " + roomCode; }
                     
                     if(data.type === 'lobby_state') { 
                         if (window.gameState !== 'LOBBY') return;
