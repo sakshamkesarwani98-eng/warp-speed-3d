@@ -564,18 +564,32 @@
                                     // Anti-Wall Mechanic: Max 1 asteroid per row, smaller sizes
                                     if (d < TOTAL_DIST && spawnedThisRow < 1) {
                                         let speedBase = lane === 0 ? 150 : (lane === 1 ? 100 : 50);
-                                        let pts = []; for(let i=0; i<8; i++) pts.push(0.75 + Math.random() * 0.5); 
-                                        // Generate 0 to 4 random craters per asteroid
-                                        let craters = [];
-                                        let numCraters = Math.floor(Math.random() * 5); 
+                                        
+                                        // 1. GENERATE TRUE 3D VERTICES (A deformed cube/rock)
+                                        let verts = [
+                                            [-1,-1,-1], [1,-1,-1], [1,1,-1], [-1,1,-1],
+                                            [-1,-1,1],  [1,-1,1],  [1,1,1],  [-1,1,1]
+                                        ].map(p => ({
+                                            x: p[0] * (0.6 + Math.random()*0.6),
+                                            y: p[1] * (0.6 + Math.random()*0.6),
+                                            z: p[2] * (0.6 + Math.random()*0.6)
+                                        }));
+
+                                        // 2. CREATE REAL 3D CRATERS (Sink vertices inward)
+                                        let numCraters = Math.floor(Math.random() * 3); // 0 to 2 physical holes
                                         for(let i=0; i<numCraters; i++) {
-                                            craters.push({
-                                                x: (Math.random() - 0.5) * 1.4, // Random X offset
-                                                y: (Math.random() - 0.5) * 1.4, // Random Y offset
-                                                r: 0.1 + Math.random() * 0.2    // Random crater size
-                                            });
+                                            let dent = Math.floor(Math.random() * 8); // Pick a random corner
+                                            verts[dent].x *= 0.1; verts[dent].y *= 0.1; verts[dent].z *= 0.1; // Collapse it inward
                                         }
-                                        traffic.push({ d: d, l: lane, s: speedBase, type: 'bh_asteroid', radius: 15 + Math.random() * 25, pts: pts, craters: craters });
+
+                                        // 3. DEFINE THE 12 TRIANGLE FACES OF THE ROCK
+                                        let faces = [
+                                            [0,1,2], [0,2,3], [5,4,7], [5,7,6],
+                                            [4,0,3], [4,3,7], [1,5,6], [1,6,2],
+                                            [3,2,6], [3,6,7], [4,5,1], [4,1,0]
+                                        ];
+
+                                        traffic.push({ d: d, l: lane, s: speedBase, type: 'bh_asteroid', radius: 15 + Math.random() * 25, mesh: {v: verts, f: faces} });
                                         lastZ[lane] = d;
                                         spawnedThisRow++;
                                     }
@@ -1079,10 +1093,67 @@ function update(dt) {
 
             let worldX = (obj.l - 1) * 150; 
             
-            // RENDER VOLUMETRIC 3D JAGGED ASTEROIDS
+            // RENDER TRUE 3D PROJECTED ASTEROIDS
             if (obj.type === 'bh_asteroid') {
-                // We draw 3 layers to simulate depth
-                for (let layer = 0; layer < 3; layer++) {
+                // Calculate Tumbling Rotation Math
+                let rotX = (performance.now() * 0.001) + obj.d * 0.01;
+                let rotY = (performance.now() * 0.0013) + obj.d * 0.01;
+                let sinX = Math.sin(rotX), cosX = Math.cos(rotX);
+                let sinY = Math.sin(rotY), cosY = Math.cos(rotY);
+
+                // 1. Rotate and Project all 3D Vertices
+                let projVerts = [];
+                for(let i=0; i<obj.mesh.v.length; i++) {
+                    let vx = obj.mesh.v[i].x * obj.radius;
+                    let vy = obj.mesh.v[i].y * obj.radius;
+                    let vz = obj.mesh.v[i].z * obj.radius;
+
+                    // Apply 3D Rotation Matrix
+                    let y1 = vy * cosX - vz * sinX;
+                    let z1 = vy * sinX + vz * cosX;
+                    let x2 = vx * cosY + z1 * sinY;
+                    let z2 = -vx * sinY + z1 * cosY;
+                    
+                    let wX = worldX + x2; let wY = -obj.radius + y1; let wZ = obj.d + z2;
+                    let p = project(wX, wY, wZ);
+                    projVerts.push({ p: p, z: wZ, lx: x2, ly: y1, lz: z2 }); // Save local coords for lighting
+                }
+
+                // 2. Process Faces and Calculate 3D Lighting
+                let facesToDraw = [];
+                for(let i=0; i<obj.mesh.f.length; i++) {
+                    let f = obj.mesh.f[i];
+                    let v0 = projVerts[f[0]], v1 = projVerts[f[1]], v2 = projVerts[f[2]];
+                    if (!v0.p || !v1.p || !v2.p) continue;
+
+                    // Calculate Face Normal (Which way is the triangle pointing?)
+                    let dx1 = v1.lx - v0.lx, dy1 = v1.ly - v0.ly, dz1 = v1.lz - v0.lz;
+                    let dx2 = v2.lx - v0.lx, dy2 = v2.ly - v0.ly, dz2 = v2.lz - v0.lz;
+                    let nx = dy1 * dz2 - dz1 * dy2, ny = dz1 * dx2 - dx1 * dz2, nz = dx1 * dy2 - dy1 * dx2;
+                    
+                    // Apply Directional Lighting
+                    let len = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1;
+                    let dot = ((nx/len) * -0.5) + ((ny/len) * -0.8) + ((nz/len) * -0.3); // Light from top-left
+                    let shade = Math.max(0.2, Math.min(1, dot + 0.6)); 
+                    
+                    facesToDraw.push({ 
+                        v0: v0.p, v1: v1.p, v2: v2.p, 
+                        z: (v0.z + v1.z + v2.z) / 3, // Average depth of the face
+                        color: `rgb(${Math.floor(130*shade)}, ${Math.floor(130*shade)}, ${Math.floor(140*shade)})` 
+                    });
+                }
+
+                // 3. Painter's Algorithm: Draw from furthest back to closest front
+                facesToDraw.sort((a, b) => b.z - a.z).forEach(face => {
+                    ctx.fillStyle = face.color;
+                    ctx.strokeStyle = "#111"; ctx.lineWidth = 1; // Dark wireframe edges
+                    ctx.beginPath();
+                    ctx.moveTo(face.v0.x, face.v0.y); ctx.lineTo(face.v1.x, face.v1.y); ctx.lineTo(face.v2.x, face.v2.y);
+                    ctx.closePath();
+                    ctx.fill(); ctx.stroke();
+                });
+                return;
+            }
                     let depthOffset = layer * (obj.radius * 0.4);
                     let pC = project(worldX, -obj.radius + depthOffset, obj.d);
                     if (!pC) continue;
