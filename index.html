@@ -268,6 +268,7 @@
             <option value="3">THE VOLCANIC FORGE</option>
             <option value="4">THE UNDERWATER ABYSS</option>
             <option value="5">THE GLITCH DIMENSION</option>
+            <option value="6">ORBITAL FLIP (GRAVITY)</option>
         </select>
         <button class="btn btn-main" onclick="window.hostRoom(null, true)">CREATE LOBBY</button>
         <button class="btn" onclick="window.showScreen('screen-menu')">BACK</button>
@@ -316,7 +317,8 @@
         { id: 2, name: "DEEP SPACE ASTEROIDS", dist: 10000, skyTop: "#000000", skyBot: "#000000", ground: "#050505", hasBoost: false, isSpace: true, isVolcano: false },
         { id: 3, name: "THE VOLCANIC FORGE", dist: 25000, skyTop: "#300000", skyBot: "#ff4500", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: true },
         { id: 4, name: "THE UNDERWATER ABYSS", dist: 15000, skyTop: "#001a33", skyBot: "#004d99", ground: "#000d1a", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: true },
-        { id: 5, name: "THE GLITCH DIMENSION", dist: 20000, skyTop: "#110022", skyBot: "#000000", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: true }
+        { id: 5, name: "THE GLITCH DIMENSION", dist: 20000, skyTop: "#110022", skyBot: "#000000", ground: "#0f0f0f", hasBoost: false, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: true },
+        { id: 6, name: "ORBITAL FLIP", dist: 24000, skyTop: "#000022", skyBot: "#ff0088", ground: "#111", hasBoost: true, isSpace: false, isVolcano: false, isAbyss: false, isGlitch: false, isGravity: true }
     ];
 
     window.updateLobbyTrackPreview = (trackId) => {
@@ -683,9 +685,13 @@ function update(dt) {
                     p1.glitchInverted = !p1.glitchInverted; // Invert controls
                     if (Math.random() < 0.4) p1.lane = Math.floor(Math.random() * 3); // Randomly teleport lanes
                 }
-                if (p1.glitchInverted) { let temp = leftPressed; leftPressed = rightPressed; rightPressed = temp; }
             } else { p1.glitchInverted = false; }
 
+            // GRAVITY FLIP & GLITCH CONTROL INVERSION
+            let gravityFlipped = TRACKS[window.activeTrack] && TRACKS[window.activeTrack].isGravity && (Math.floor(p1.dist / 4000) % 2 !== 0);
+            if (p1.glitchInverted || gravityFlipped) { 
+                let temp = leftPressed; leftPressed = rightPressed; rightPressed = temp; 
+            }
             if(leftPressed) p1.lane -= steerSpeed * dt;
             if(rightPressed) p1.lane += steerSpeed * dt;
             p1.lane = Math.max(-0.2, Math.min(2.2, p1.lane)); p1.camLane += (p1.lane - p1.camLane) * 8 * dt; 
@@ -807,6 +813,17 @@ function update(dt) {
         let w = canvas.width, h = canvas.height; ctx.save();
         let horizon = h * 0.45; let skyGrad = ctx.createLinearGradient(0, 0, 0, horizon);
         let tData = TRACKS[window.activeTrack];
+
+        // --- THE GRAVITY CAMERA FLIP ---
+        if (tData && tData.isGravity) {
+            let viewDist = (p1.dead && window.spectatingId) ? (clients.find(c => c.id === window.spectatingId)?.dist || 0) : p1.dist;
+            let shouldFlip = Math.floor(viewDist / 4000) % 2 !== 0;
+            canvas.style.transition = "transform 0.8s ease-in-out";
+            canvas.style.transform = shouldFlip ? "rotate(180deg)" : "rotate(0deg)";
+        } else {
+            canvas.style.transform = "rotate(0deg)";
+            canvas.style.transition = "none";
+        }
         skyGrad.addColorStop(0, tData.skyTop); skyGrad.addColorStop(1, tData.skyBot); 
         ctx.fillStyle = skyGrad; ctx.fillRect(0,0,w,h); 
         
