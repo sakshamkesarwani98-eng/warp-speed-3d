@@ -554,20 +554,22 @@
                     traffic = []; let types = ['speedster', 'commuter', 'tank']; let lastZ = [0, 0, 0]; 
                     for (let d = 800; d < TOTAL_DIST + 8000; d += 250) {
                         let safeLane = Math.floor(d / 500) % 3; 
+                        let spawnedThisRow = 0;
 
                       for (let lane = 0; lane < 3; lane++) {
                             if (lane === safeLane) continue; 
                             if (Math.random() < 0.4 && (d - lastZ[lane] > 300)) { 
                                 let activeTrack = TRACKS[window.activeTrack];
                                 if (activeTrack.isBlackHole) {
-                                    if (d < TOTAL_DIST) {
-                                        // LANE 0: 200. LANE 1: 100. LANE 2: 50.
-                                        let speedBase = lane === 0 ? 200 : (lane === 1 ? 100 : 50);
-                                        traffic.push({ d: d, l: lane, s: speedBase, type: 'bh_asteroid', radius: 20 + Math.random() * 60 });
+                                    // Anti-Wall Mechanic: Max 1 asteroid per row, smaller sizes
+                                    if (d < TOTAL_DIST && spawnedThisRow < 1) {
+                                        let speedBase = lane === 0 ? 150 : (lane === 1 ? 100 : 50);
+                                        let pts = []; for(let i=0; i<8; i++) pts.push(0.75 + Math.random() * 0.5); // Jagged edges
+                                        traffic.push({ d: d, l: lane, s: speedBase, type: 'bh_asteroid', radius: 15 + Math.random() * 25, pts: pts });
                                         lastZ[lane] = d;
+                                        spawnedThisRow++;
                                     }
-                                } else if (activeTrack.isSpace) {
-                                    if (d < TOTAL_DIST) { 
+                                } else if (activeTrack.isSpace) {                                    if (d < TOTAL_DIST) { 
                                         traffic.push({ d: d, l: lane, s: 0, type: 'asteroid', col: {f:"#555", t:"#666", s:"#444", b:"#333"}, state: 0, y: 2000 });
                                         lastZ[lane] = d;
                                     }
@@ -902,14 +904,14 @@ function update(dt) {
                 ctx.moveTo(w/2 - eRadius*0.5, horizon - 80); ctx.lineTo(w/2 + eRadius*0.4, horizon - 40); ctx.stroke();
             }
 
-            // 2. The Black Hole (Grows and shifts to the far left)
-            let cx = w * (0.5 - (progress * 0.35)); // Moves from center to left side
-            let cy = horizon * (0.3 + (progress * 0.2)); 
+            // 2. The Black Hole (Anchored to the left)
+            let cx = w * 0.15; // Permanently on the left side
+            let cy = horizon * 0.4; 
             
-            ctx.beginPath(); ctx.ellipse(cx, cy, 50 + (progress*300), 20 + (progress*80), (performance.now()*0.001) % (Math.PI*2), 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(120, 0, 255, ${0.1 + progress*0.4})`; ctx.shadowBlur = 20 + (progress*60); ctx.shadowColor = "#a0f"; ctx.fill();
+            ctx.beginPath(); ctx.ellipse(cx, cy, 150 + (progress*200), 60 + (progress*60), (performance.now()*0.001) % (Math.PI*2), 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(120, 0, 255, ${0.3 + progress*0.4})`; ctx.shadowBlur = 40 + (progress*60); ctx.shadowColor = "#a0f"; ctx.fill();
             
-            ctx.beginPath(); ctx.arc(cx, cy, 10 + (progress*100), 0, Math.PI * 2);
+            ctx.beginPath(); ctx.arc(cx, cy, 40 + (progress*80), 0, Math.PI * 2);
             ctx.fillStyle = "#000"; ctx.shadowBlur = 0; ctx.fill();
         }        
         // Render Glitch Screen Tearing
@@ -1069,15 +1071,29 @@ function update(dt) {
 
             let worldX = (obj.l - 1) * 150; 
             
-            // RENDER CIRCULAR FRONT-FACING ASTEROIDS
+            // RENDER NATURAL JAGGED ASTEROIDS
             if (obj.type === 'bh_asteroid') {
                 let pC = project(worldX, -obj.radius, obj.d);
                 if (pC) {
-                    ctx.beginPath(); ctx.arc(pC.x, pC.y, obj.radius * pC.s, 0, Math.PI * 2);
+                    ctx.beginPath();
+                    // Draw irregular polygon using generated points
+                    for(let i = 0; i < 8; i++) {
+                        let angle = (i / 8) * Math.PI * 2;
+                        let r = obj.radius * pC.s * (obj.pts ? obj.pts[i] : 1);
+                        let px = pC.x + Math.cos(angle) * r;
+                        let py = pC.y + Math.sin(angle) * r;
+                        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                    }
+                    ctx.closePath();
+                    
                     let grad = ctx.createRadialGradient(pC.x - (obj.radius*0.3*pC.s), pC.y - (obj.radius*0.3*pC.s), obj.radius*0.1*pC.s, pC.x, pC.y, obj.radius*pC.s);
-                    // TRUE STONE GREY PALETTE
                     grad.addColorStop(0, "#888"); grad.addColorStop(1, "#222"); ctx.fillStyle = grad; ctx.fill();
                     ctx.lineWidth = 2; ctx.strokeStyle = "#111"; ctx.stroke();
+                    
+                    // Add crater details
+                    ctx.fillStyle = "#111";
+                    ctx.beginPath(); ctx.arc(pC.x + (obj.radius*0.2*pC.s), pC.y - (obj.radius*0.2*pC.s), obj.radius*0.2*pC.s, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(pC.x - (obj.radius*0.3*pC.s), pC.y + (obj.radius*0.2*pC.s), obj.radius*0.15*pC.s, 0, Math.PI*2); ctx.fill();
                 }
                 return;
             }
