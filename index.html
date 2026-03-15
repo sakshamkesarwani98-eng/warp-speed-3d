@@ -593,8 +593,10 @@
                                         lastZ[lane] = d;
                                         spawnedThisRow++;
                                     }
-                                } else if (activeTrack.isSpace) {                                    if (d < TOTAL_DIST) { 
-                                        traffic.push({ d: d, l: lane, s: 0, type: 'asteroid', col: {f:"#555", t:"#666", s:"#444", b:"#333"}, state: 0, y: 2000 });
+                                } else if (activeTrack.isSpace) {
+                                    if (d < TOTAL_DIST) { 
+                                        // Doubled Y height to 4000 so they spawn totally out of sight
+                                        traffic.push({ d: d, l: lane, s: 0, type: 'asteroid', col: {f:"#555", t:"#666", s:"#444", b:"#333"}, state: 0, y: 4000 });
                                         lastZ[lane] = d;
                                     }
                                 } else if (activeTrack.isVolcano) {
@@ -790,7 +792,9 @@ function update(dt) {
                     if (t.type === 'asteroid') {
                         let leadDist = p1.dist; clients.forEach(c => { if (!c.dead && c.dist > leadDist) leadDist = c.dist; });
                         if (t.state === 0 && (t.d - leadDist) < 1200 && (t.d - leadDist) > 0) t.state = 1; 
-                        if (t.state === 1) { t.y -= 3500 * dt; if (t.y <= 0) { t.y = 0; t.state = 2; } }
+                        // Doubled drop speed to 7000 so it still hits the track at the perfect moment
+                        if (t.state === 1) { t.y -= 7000 * dt; if (t.y <= 0) { t.y = 0; t.state = 2; } }
+                    }
                     } else if (t.type === 'magma') {
                         let leadDist = p1.dist; clients.forEach(c => { if (!c.dead && c.dist > leadDist) leadDist = c.dist; });
                         if (t.state === 0 && (t.d - leadDist) < 800 && (t.d - leadDist) > 0) t.state = 1;
@@ -1162,26 +1166,10 @@ function update(dt) {
             if (obj.type === 'asteroid') {
                 let currentY = obj.y || 0;
                 
-                // Draw Red Warning Zone on the ground if it hasn't landed
-                if (obj.state === 0 || obj.state === 1) {
-                    draw3DBox(worldX, obj.d, dims.w * 1.5, 2, dims.lB * 1.5, {f:"#ff0000", t:"#ff0000", s:"#aa0000", b:"#550000"}, 0);
-                }
-                
-                // Draw the asteroid high in the air or on the ground
+                // Draw the asteroid high in the air or on the ground (Red Warning Box completely removed)
                 draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, currentY);
                 draw3DBox(worldX, obj.d + 15, dims.w*0.8, dims.hB*0.5, dims.lB*0.5, {f:"#444", t:"#555", s:"#333", b:"#222"}, currentY + dims.hB);
                 return; 
-            }
-            if (obj.type === 'magma') {
-                let currentY = obj.y || 0;
-                if (obj.state === 0 || obj.state === 1) {
-                    draw3DBox(worldX, obj.d, dims.w * 1.5, 2, dims.lB * 1.5, {f:"#ffff00", t:"#ffff00", s:"#aaaa00", b:"#555500"}, 0);
-                }
-                if (currentY > -200) {
-                    draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, currentY);
-                    draw3DBox(worldX, obj.d, dims.w*0.7, dims.hB, dims.lB*0.7, {f:"#ffaa00", t:"#ffaa00", s:"#ffaa00", b:"#ffaa00"}, currentY); 
-                }
-                return;
             }
             if (obj.type === 'puddle') {
                 draw3DBox(worldX, obj.d, dims.w, dims.hB, dims.lB, obj.col, 0);
