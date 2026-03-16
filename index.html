@@ -156,54 +156,64 @@
         function updateHUDName() { document.getElementById('hud-player-name').innerText = "RACER: " + window.playerName; }
 
         // --- UNSANCTIONED GLOBAL CHAT SYSTEM (FIREBASE ENABLED) ---
-        const chatHeader = document.getElementById('chat-header');
-        const chatBody = document.getElementById('chat-body');
-        const chatToggle = document.getElementById('chat-toggle');
-        const chatMessages = document.getElementById('chat-messages');
-        const chatInput = document.getElementById('chat-input');
-        const btnSend = document.getElementById('btn-send-chat');
+        window.addEventListener('DOMContentLoaded', () => {
+            const chatHeader = document.getElementById('chat-header');
+            const chatBody = document.getElementById('chat-body');
+            const chatToggle = document.getElementById('chat-toggle');
+            const chatMessages = document.getElementById('chat-messages');
+            const chatInput = document.getElementById('chat-input');
+            const btnSend = document.getElementById('btn-send-chat');
 
-        if (chatHeader) {
-            chatHeader.addEventListener('click', () => {
-                chatBody.classList.toggle('hidden');
-                chatToggle.innerText = chatBody.classList.contains('hidden') ? "▲" : "▼";
-                if(!chatBody.classList.contains('hidden')) chatMessages.scrollTop = chatMessages.scrollHeight;
-            });
-        }
-
-        async function sendGlobalMessage() {
-            const msg = chatInput.value.trim();
-            if (!msg || !window.playerName) return;
-            
-            try {
-                await addDoc(collection(db, "globalChat"), {
-                    user: window.playerName,
-                    text: msg,
-                    timestamp: serverTimestamp()
+            if (chatHeader) {
+                chatHeader.addEventListener('click', () => {
+                    chatBody.classList.toggle('hidden');
+                    chatToggle.innerText = chatBody.classList.contains('hidden') ? "▲" : "▼";
+                    if(!chatBody.classList.contains('hidden')) chatMessages.scrollTop = chatMessages.scrollHeight;
                 });
-                chatInput.value = "";
-            } catch (e) { console.error("Chat Error:", e); }
-        }
-
-        if (btnSend) btnSend.addEventListener('click', sendGlobalMessage);
-        if (chatInput) chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendGlobalMessage(); });
-
-        const chatQuery = query(collection(db, "globalChat"), orderBy("timestamp", "desc"), limit(50));
-        onSnapshot(chatQuery, (snapshot) => {
-            let html = "";
-            const msgs = snapshot.docs.reverse();
-            msgs.forEach(doc => {
-                const data = doc.data();
-                const color = (data.user === window.playerName) ? "#00ffcc" : "#ff00ff";
-                html += `<div style="margin-bottom:6px; word-break: break-word;">
-                            <span style="color:${color}; font-weight:bold;">${data.user}:</span> 
-                            <span style="color:#fff;">${data.text}</span>
-                         </div>`;
-            });
-            if (chatMessages) {
-                chatMessages.innerHTML = html;
-                chatMessages.scrollTop = chatMessages.scrollHeight;
             }
+
+            async function sendGlobalMessage() {
+                const msg = chatInput.value.trim();
+                if (!msg || !window.playerName) return;
+                
+                try {
+                    btnSend.innerText = "..."; // Visual feedback that it is trying
+                    await addDoc(collection(db, "globalChat"), {
+                        user: window.playerName,
+                        text: msg,
+                        timestamp: serverTimestamp()
+                    });
+                    chatInput.value = "";
+                    btnSend.innerText = "SEND";
+                } catch (e) { 
+                    console.error("Chat Error:", e); 
+                    alert("FIREBASE BLOCKED IT! Check your Firestore Rules.");
+                    btnSend.innerText = "SEND";
+                }
+            }
+
+            if (btnSend) btnSend.addEventListener('click', sendGlobalMessage);
+            if (chatInput) chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendGlobalMessage(); });
+
+            const chatQuery = query(collection(db, "globalChat"), orderBy("timestamp", "desc"), limit(50));
+            onSnapshot(chatQuery, (snapshot) => {
+                let html = "";
+                const msgs = snapshot.docs.reverse();
+                msgs.forEach(doc => {
+                    const data = doc.data();
+                    const color = (data.user === window.playerName) ? "#00ffcc" : "#ff00ff";
+                    html += `<div style="margin-bottom:6px; word-break: break-word;">
+                                <span style="color:${color}; font-weight:bold;">${data.user}:</span> 
+                                <span style="color:#fff;">${data.text}</span>
+                             </div>`;
+                });
+                if (chatMessages) {
+                    chatMessages.innerHTML = html;
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            }, (error) => {
+                if (chatMessages) chatMessages.innerHTML = `<div style="color:red; padding:10px; font-weight:bold;">DATABASE BLOCKED. CHECK FIRESTORE RULES.</div>`;
+            });
         });
 
     </script>
