@@ -388,10 +388,12 @@
         }
         triggerIgnition(); 
     };
+
+    window.updateLobbyTrackPreview = (trackId) => {
+        const track = TRACKS[trackId];
         const imgEl = document.getElementById('lobby-track-img');
         const nameEl = document.getElementById('lobby-track-name');
         
-        // This will look for images named track0.png, track1.png, etc. in an "assets" folder
         if(imgEl) imgEl.src = "assets/track" + trackId + ".png"; 
         if(nameEl) nameEl.innerText = track ? track.name : "UNKNOWN TRACK";
     };
@@ -838,7 +840,13 @@ function update(dt) {
                     if (p1.speed <= topSpeed) p1.speed = Math.min(topSpeed, p1.speed + accelRate * dt);
                     else p1.speed = Math.max(topSpeed, p1.speed - 150 * dt);
                 } else p1.speed = Math.max(0, p1.speed - friction * dt);
-            }            let prevDist = p1.dist;
+            }
+            
+            // MOVE THE PLAYER FORWARD
+            if (!crossTriggered) {
+                p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
+            }
+
             // --- SINGLE PLAYER AI BOT LOGIC ---
             clients.forEach(c => {
                 if (c.isBot && !c.dead && !crossTriggered) {
