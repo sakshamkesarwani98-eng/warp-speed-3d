@@ -521,15 +521,20 @@
     const COLORS = [ { f: "#b02", t: "#d03", s: "#801", b: "#e04" }, { f: "#15b", t: "#26c", s: "#049", b: "#37d" }, { f: "#182", t: "#293", s: "#061", b: "#3a4" }, { f: "#aa1", t: "#bb2", s: "#880", b: "#cc3" }, { f: "#80d", t: "#91e", s: "#60b", b: "#a2f" }, { f: "#d60", t: "#f80", s: "#a40", b: "#fa2" }, { f: "#199", t: "#2aa", s: "#077", b: "#3bb" }, { f: "#e17", t: "#f28", s: "#c05", b: "#f39" }, { f: "#ddd", t: "#eee", s: "#bbb", b: "#fff" }, { f: "#333", t: "#444", s: "#111", b: "#555" } ];
     const V_DIMS = { player: { w: 45, hB: 18, hC: 14, lB: 100, lC: 45, zOff: 25 }, speedster: { w: 35, hB: 14, hC: 10, lB: 90, lC: 40, zOff: 20 }, commuter: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 }, tank: { w: 70, hB: 40, hC: 25, lB: 140, lC: 70, zOff: 35 }, asteroid: { w: 70, hB: 60, hC: 0, lB: 70, lC: 0, zOff: 0 }, magma: { w: 80, hB: 250, hC: 0, lB: 80, lC: 0, zOff: 0 }, puddle: { w: 120, hB: 2, hC: 0, lB: 120, lC: 0, zOff: 0 }, jellyfish: { w: 60, hB: 80, hC: 0, lB: 60, lC: 0, zOff: 0 }, bubble: { w: 30, hB: 30, hC: 0, lB: 30, lC: 0, zOff: 0 }, phantom: { w: 45, hB: 18, hC: 15, lB: 100, lC: 45, zOff: 25 } };
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; } window.onresize = resize; resize();
+    
+    // THE MASTER SHOWSCREEN FUNCTION
     window.showScreen = function(id) { 
         document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); 
         if(id) document.getElementById(id).classList.remove('hidden'); 
         
-        // HIDE CHAT FOR GUESTS AND LOGIN SCREEN
         let chat = document.getElementById('global-chat-container');
         if(chat) {
-            if(id === 'screen-auth-main' || (window.playerName && window.playerName.startsWith('GUEST_'))) chat.style.display = 'none';
-            else chat.style.display = 'block';
+            // Force hide if it's the login screen OR if the player is a guest
+            if(id === 'screen-auth-main' || (window.playerName && window.playerName.startsWith('GUEST_'))) {
+                chat.style.display = 'none';
+            } else {
+                chat.style.display = 'block';
+            }
         }
     };
 
