@@ -251,12 +251,34 @@
         <button class="btn btn-main" onclick="window.claimUsername()">CLAIM HANDLE</button>
         <div id="gate-err" style="color:#ff4444; margin-top:15px; height:20px; font-weight:bold;"></div>
     </div>
+    <div id="screen-mode-select" class="screen hidden">
+        <h1>CHOOSE MODE</h1>
+        <button class="btn btn-main" style="width: 300px; background:#ffcc00; font-size: 1.5rem;" onclick="window.showScreen('screen-single-player'); window.renderSPMaps();">SINGLE PLAYER</button>
+        <button class="btn btn-main" style="width: 300px; background:#00f0ff; font-size: 1.5rem;" onclick="window.showScreen('screen-menu')">MULTIPLAYER</button>
+        <button class="btn" style="background:transparent; border: 2px solid #fff; color:#fff; margin-top: 50px;" onclick="window.doLogout()">LOGOUT</button>
+    </div>
+
+    <div id="screen-single-player" class="screen hidden">
+        <h2 style="font-size: 3rem; color: #fff; margin-bottom: 10px;">SELECT TRACK</h2>
+        
+        <div id="sp-map-grid" style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; max-width: 900px; max-height: 45vh; overflow-y: auto; margin-bottom: 20px;">
+            </div>
+        
+        <div style="background: rgba(0,0,0,0.8); padding: 15px; border: 2px solid #00ffcc; border-radius: 8px; width: 90%; max-width: 500px; text-align: center;">
+            <h3 style="color:#fff; margin-bottom: 10px; font-size: 1.2rem;">COMPUTER LEVEL: <span id="bot-level-display" style="color:#00ffcc;">5</span></h3>
+            <input type="range" id="bot-level-slider" min="1" max="10" value="5" oninput="window.updateBotLevel(this.value)" style="width: 100%; cursor: pointer;">
+            <p id="bot-level-text" style="color: #ffff00; margin-top: 10px; font-weight: bold; font-size: 1.2rem;">PRO RACER</p>
+        </div>
+
+        <button class="btn" onclick="window.showScreen('screen-mode-select')" style="margin-top: 20px; background: #555; color: #fff;">BACK</button>
+    </div>
+
     <div id="screen-menu" class="screen hidden">
-        <h1>THE HUB</h1>
+        <h1>MULTIPLAYER HUB</h1>
         <button class="btn btn-main" style="width: 300px; background:#00f0ff;" onclick="window.findQuickRace()">⚡ QUICK RACE</button>
         <button class="btn btn-main" style="width: 300px;" onclick="window.showScreen('screen-host-setup')">HOST PRIVATE</button>
         <button class="btn btn-alt" style="width: 300px;" onclick="window.showScreen('screen-join-setup')">JOIN PRIVATE</button>
-        <button class="btn" style="background:transparent; border: 2px solid #fff; color:#fff; margin-top: 50px;" onclick="window.doLogout()">LOGOUT</button>
+        <button class="btn" style="background:transparent; border: 2px solid #fff; color:#fff; margin-top: 20px;" onclick="window.showScreen('screen-mode-select')">BACK</button>
     </div>
     <div id="screen-host-setup" class="screen hidden">
         <h2>PRIVATE ROOM</h2>
@@ -323,8 +345,49 @@
         { id: 7, name: "BLACK HOLE SPIRAL", dist: 25000, skyTop: "#000000", skyBot: "#110033", ground: "#050011", hasBoost: false, isSpace: true, isVolcano: false, isAbyss: false, isGlitch: false, isGravity: false, isBlackHole: true }
     ];
 
-    window.updateLobbyTrackPreview = (trackId) => {
-        const track = TRACKS[trackId];
+    window.botLevel = 5;
+    window.renderSPMaps = () => {
+        let grid = document.getElementById('sp-map-grid'); grid.innerHTML = "";
+        TRACKS.forEach((t, idx) => {
+            grid.innerHTML += `
+            <div onclick="window.startSinglePlayer(${idx})" style="background: rgba(0,0,0,0.6); border: 2px solid #444; border-radius: 8px; padding: 10px; cursor: pointer; text-align: center; width: 200px; transition: 0.2s;" onmouseover="this.style.borderColor='#00ffcc'; this.style.transform='scale(1.05)';" onmouseout="this.style.borderColor='#444'; this.style.transform='scale(1)';">
+                <img src="assets/track${idx}.png" style="width: 100%; height: 80px; object-fit: cover; border-radius: 4px; margin-bottom: 5px; border: 1px solid #222;">
+                <div style="font-size: 0.9rem; color: #FFD700; text-transform: uppercase; font-weight: bold;">${t.name}</div>
+            </div>`;
+        });
+    };
+
+    window.updateBotLevel = (val) => {
+        window.botLevel = parseInt(val);
+        document.getElementById('bot-level-display').innerText = val;
+        let text = "SUNDAY DRIVER"; let col = "#00ff00";
+        if (val >= 4) { text = "PRO RACER"; col = "#ffff00"; }
+        if (val >= 8) { text = "INTERSTELLAR ACE"; col = "#ff4444"; }
+        if (val == 10) { text = "UNBEATABLE"; col = "#ff00ff"; }
+        let el = document.getElementById('bot-level-text');
+        el.innerText = text; el.style.color = col;
+    };
+
+    window.startSinglePlayer = (trackId) => {
+        window.activeTrack = trackId; TOTAL_DIST = TRACKS[trackId].dist;
+        window.isHost = true; window.isPrivateRoom = true; window.gameState = 'LOBBY'; 
+        
+        clients = [];
+        const botNames = ["X-RACER", "CYBERDASH", "VOIDWALKER", "NEONPULSE", "STARDRIFT", "GHOST", "APEX", "OMEGA", "PULSAR", "VIPER"];
+        for(let i=0; i<9; i++) {
+            let bLvl = window.botLevel;
+            let maxS = 160 + (bLvl * 14) + (Math.random() * 20);
+            if (bLvl === 10) maxS = 360; // Lift speed cap for Unbeatable
+            
+            clients.push({
+                id: "BOT_" + i, name: botNames[i], dist: 0, lane: i % 3, targetLane: i % 3,
+                speed: 0, maxSpeed: maxS, accel: 80 + (bLvl * 15), nitro: 100, turboActive: false,
+                isBot: true, botLevel: bLvl, dead: false, isBraking: false,
+                colIdx: i + 1, finishTime: 999999999, lastSeen: Date.now()
+            });
+        }
+        triggerIgnition(); 
+    };
         const imgEl = document.getElementById('lobby-track-img');
         const nameEl = document.getElementById('lobby-track-name');
         
@@ -776,16 +839,50 @@ function update(dt) {
                     else p1.speed = Math.max(topSpeed, p1.speed - 150 * dt);
                 } else p1.speed = Math.max(0, p1.speed - friction * dt);
             }            let prevDist = p1.dist;
-            if (!crossTriggered) {
-                p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
-                let activeTrackData = TRACKS[window.activeTrack];
-                if (activeTrackData && activeTrackData.hasBoost) {
-                    let padSpacing = 2000;
-                    if (Math.floor(p1.dist / padSpacing) > Math.floor(prevDist / padSpacing) && p1.dist < TOTAL_DIST) {
-                        p1.speed = 900; p1.nitro = 100;
+            // --- SINGLE PLAYER AI BOT LOGIC ---
+            clients.forEach(c => {
+                if (c.isBot && !c.dead && !crossTriggered) {
+                    // 1. Acceleration
+                    if (c.speed < c.maxSpeed && !c.isBraking) c.speed += c.accel * dt;
+                    else if (c.speed > c.maxSpeed && !c.turboActive) c.speed -= 100 * dt;
+
+                    // 2. Unbeatable Nitro Management (Level 8-10)
+                    if (c.botLevel >= 8 && c.nitro > 30 && c.speed > 200) {
+                        let clear = !traffic.find(t => t.l === c.targetLane && (t.d - c.dist) < 800 && (t.d - c.dist) > 0);
+                        if (clear) c.turboActive = true;
                     }
+                    if (c.turboActive) {
+                        c.nitro -= 16.5 * dt; c.speed = Math.min(640, c.speed + 300 * dt);
+                        if (c.nitro <= 0) { c.turboActive = false; c.nitro = 0; }
+                    } else if (c.nitro < 100) c.nitro += 15 * dt;
+
+                    // 3. Perfect Obstacle Avoidance
+                    let lookAhead = 300 + (c.botLevel * 70); // Reacts earlier at higher levels
+                    let danger = traffic.find(t => {
+                        let hitZ = (V_DIMS[t.type] ? V_DIMS[t.type].lB : t.radius || 50) + (c.speed * dt * 0.2);
+                        return Math.abs(t.l - c.targetLane) < 0.5 && (t.d - c.dist) < lookAhead && (t.d - c.dist) > -hitZ && t.type !== 'phantom' && t.type !== 'puddle';
+                    });
+
+                    if (danger) {
+                        let lanes = [0, 1, 2].sort(() => Math.random() - 0.5); 
+                        if (c.botLevel >= 8) lanes = [1, 0, 2]; // Smart bots prioritize center
+                        for (let l of lanes) {
+                            let obs = traffic.find(t => Math.abs(t.l - l) < 0.5 && (t.d - c.dist) < lookAhead && (t.d - c.dist) > -50 && t.type !== 'phantom');
+                            if (!obs) { c.targetLane = l; break; }
+                        }
+                        c.isBraking = (c.botLevel < 5); // Dumb bots brake when panicked, pros never brake
+                    } else {
+                        c.isBraking = false;
+                        if (c.botLevel >= 8 && c.targetLane !== 1 && !traffic.find(t => t.l === 1 && (t.d - c.dist) < lookAhead && (t.d - c.dist) > -50)) c.targetLane = 1; // Return to center
+                    }
+
+                    // 4. Smooth Steering & Physics
+                    if (c.lane < c.targetLane) c.lane = Math.min(c.targetLane, c.lane + 4.5 * dt);
+                    if (c.lane > c.targetLane) c.lane = Math.max(c.targetLane, c.lane - 4.5 * dt);
+                    c.dist += (c.speed * 0.277 * 4.0) * dt;
+                    if (c.dist >= TOTAL_DIST) { c.dist = TOTAL_DIST; c.finishTime = performance.now(); }
                 }
-            }
+            });
 
             traffic.forEach(t => {
                 if(window.isHost) { 
