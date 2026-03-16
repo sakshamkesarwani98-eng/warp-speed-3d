@@ -157,6 +157,17 @@
     </script>
 
     <style>
+        /* Custom Neon Slider Styling */
+        input[type=range] { 
+            -webkit-appearance: none; width: 100%; height: 12px; border-radius: 6px; border: 1px solid #444; outline: none;
+            background: linear-gradient(to right, #ffff00 44.4%, #222 44.4%); /* Default level 5 start */
+        }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 12px; cursor: pointer; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { 
+            height: 26px; width: 26px; border-radius: 50%; background: #fff; cursor: pointer; 
+            -webkit-appearance: none; margin-top: -8px; box-shadow: 0 0 10px #fff; border: 3px solid #222; 
+        }
+
         /* CSS Reset & Core Arcade Styling */
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; font-family: 'Arial Black', sans-serif; }
         body { background-color: #000; color: white; overflow: hidden; touch-action: none; }
@@ -393,19 +404,19 @@
         
         clients = []; 
         let bLvl = window.botLevel;
-        let maxS = 160 + (bLvl * 20); // Scaled up!
-        if (bLvl >= 10) maxS = 500; // Immortal Speed
         
-        // SPAWN ONLY 1 BOSS RIVAL
+        // FAIR STATS: Bot matches player's top speed and acceleration base
+        let fairMaxSpeed = 360; 
+        let fairAccel = 300; 
+
         clients.push({
             id: "BOT_BOSS", name: "BOT_LVL" + bLvl + "_BOSS", dist: 0, lane: 1, targetLane: 1,
-            speed: 0, maxSpeed: maxS, accel: 100 + (bLvl * 25), nitro: 100, turboActive: false,
+            speed: 0, maxSpeed: fairMaxSpeed, accel: fairAccel, nitro: 100, turboActive: false,
             isBot: true, botLevel: bLvl, dead: false, isBraking: false,
             colIdx: 2, finishTime: 999999999, lastSeen: Date.now()
         });
         triggerIgnition(); 
     };
-
     window.updateLobbyTrackPreview = (trackId) => {
         const track = TRACKS[trackId];
         const imgEl = document.getElementById('lobby-track-img');
@@ -511,7 +522,7 @@
                 hostPingInterval = setInterval(() => {
                     let now = Date.now(); let zCount = 0;
                     clients.forEach(c => { 
-                        if (c.isBot) return; // IMMORTAL SHIELD: Never kick bots!
+                        if (c.isBot) return; // DON'T PING-KICK BOTS
                         if (now - c.lastSeen > 6000) { c.dead = true; zCount++; if(window.gameState === 'LOBBY') { try { c.conn.close(); } catch(e){} } } 
                     });
                     if (zCount > 0 && window.gameState === 'LOBBY') { 
@@ -893,53 +904,62 @@ function update(dt) {
                 p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
             }
 
-            // --- AI BOT LOGIC (IMMORTAL UPDATE) ---
+           // --- AI BOT LOGIC (SUPER INTELLIGENCE 100% EQUAL UPDATE) ---
             clients.forEach(c => {
                 if (c.isBot && !c.dead && !crossTriggered) {
-                    // 1. Acceleration & Nitro (Aggressive)
+                    // 1. Fair Acceleration & Equal Top Speed
                     if (c.speed < c.maxSpeed && !c.isBraking) c.speed += c.accel * dt;
                     else if (c.speed > c.maxSpeed && !c.turboActive) c.speed -= 100 * dt;
 
-                    if (c.botLevel >= 8 && c.nitro > 20 && c.speed > 200) {
-                        let clear = !traffic.find(t => t.l === c.targetLane && (t.d - c.dist) < 1000 && (t.d - c.dist) > 0);
-                        if (clear) c.turboActive = true;
+                    // Super Intel: Only use Nitro if player is gaining or it's a straightaway
+                    let playerGaining = (p1.dist < c.dist) && (p1.speed > c.speed);
+                    if (c.botLevel >= 8 && c.nitro > 30 && (playerGaining || c.speed < c.maxSpeed)) {
+                        let lookAheadClear = !traffic.find(t => t.l === c.targetLane && (t.d - c.dist) < 1000 && (t.d - c.dist) > 0);
+                        if (lookAheadClear) c.turboActive = true;
                     }
+                    
+                    // 100% EQUAL NITRO STATS
                     if (c.turboActive) {
-                        c.nitro -= 15 * dt; c.speed = Math.min(650, c.speed + 400 * dt);
+                        c.nitro -= 16.5 * dt; // Exact same drain as player
+                        c.speed = Math.min(640, c.speed + 300 * dt); // Exact same 640mph cap
                         if (c.nitro <= 0) { c.turboActive = false; c.nitro = 0; }
-                    } else if (c.nitro < 100) c.nitro += 20 * dt;
+                    } else if (c.nitro < 100) {
+                        c.nitro += 15 * dt; // Exact same refill rate as player
+                    }
 
-                    // 2. Immortal Collision Foreknowledge
-                    let lookAhead = 300 + (c.botLevel * 100);
+                    // 2. Immortal Collision Avoidance (Perfect Info)
+                    let lookAhead = 400 + (c.botLevel * 100);
                     let danger = traffic.find(t => {
                         let hitZ = (V_DIMS[t.type] ? V_DIMS[t.type].lB : t.radius || 50) + (c.speed * dt * 0.5);
-                        return Math.abs(t.l - c.lane) < 0.6 && (t.d - c.dist) < lookAhead && (t.d - c.dist) > -hitZ && t.type !== 'phantom' && t.type !== 'puddle';
+                        return Math.abs(t.l - c.lane) < 0.6 && (t.d - c.dist) < lookAhead && (t.d - c.dist) > -hitZ && t.type !== 'phantom';
                     });
 
                     if (danger) {
-                        // Find a lane with NO obstacles
                         let safeLanes = [0, 1, 2].filter(l => !traffic.find(t => Math.abs(t.l - l) < 0.6 && (t.d - c.dist) < lookAhead && (t.d - c.dist) > -50 && t.type !== 'phantom'));
-                        
                         if (safeLanes.length > 0) {
-                            c.targetLane = safeLanes.sort((a,b) => Math.abs(c.lane - a) - Math.abs(c.lane - b))[0]; // Pick closest safe
+                            c.targetLane = safeLanes.sort((a,b) => Math.abs(c.lane - a) - Math.abs(c.lane - b))[0];
                         } else if (c.botLevel >= 10) {
-                            // IMMORTAL PHASE SHIFT: No safe lanes? Teleport through the gap!
+                            // Phase-Shift Fail-safe
                             c.lane = (c.lane === 1) ? 0 : 1; 
                             c.targetLane = c.lane;
                         }
-                        c.isBraking = (c.botLevel < 5);
                     } else {
-                        c.isBraking = false;
-                        // HUNTER LOGIC: Block player if bot is ahead and level 10
-                        if (c.botLevel >= 10 && p1.dist < c.dist && (c.dist - p1.dist) < 600) {
-                            c.targetLane = Math.round(p1.camLane); // Swerve to block you!
-                        } else if (c.botLevel >= 8 && c.targetLane !== 1 && !traffic.find(t => t.l === 1 && (t.d - c.dist) < lookAhead)) {
-                            c.targetLane = 1; // Return to center
+                        // 3. SUPER INTEL STRATEGIES (DRAFTING & BLOCKING)
+                        if (c.botLevel >= 9) {
+                            if (p1.dist > c.dist && (p1.dist - c.dist) < 800) {
+                                // DRAFTING: Follow the player's lane to catch up
+                                c.targetLane = Math.round(p1.lane);
+                            } else if (c.dist > p1.dist && (c.dist - p1.dist) < 500) {
+                                // BLOCKING: Stay in front of the player to stop them passing
+                                c.targetLane = Math.round(p1.lane);
+                            } else {
+                                c.targetLane = 1; // Default to center
+                            }
                         }
                     }
 
-                    // 3. Smooth Steering & Physics
-                    let steerSpeed = 4.5 + (c.botLevel * 0.5); // Level 10 steers insanely fast
+                    // 4. Fair Physics Steering
+                    let steerSpeed = 4.5 + (c.botLevel * 0.4); 
                     if (c.lane < c.targetLane) c.lane = Math.min(c.targetLane, c.lane + steerSpeed * dt);
                     if (c.lane > c.targetLane) c.lane = Math.max(c.targetLane, c.lane - steerSpeed * dt);
                     
