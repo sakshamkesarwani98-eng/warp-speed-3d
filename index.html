@@ -85,7 +85,8 @@
                     transaction.set(nameRef, { uid: window.userUID });
                     transaction.set(doc(db, "users", window.userUID), { username: inputName });
                 });
-                window.playerName = inputName; updateHUDName(); window.showScreen('screen-mode-select'); // ROUTED TO MODE SELECT            } catch (e) { errDiv.innerText = e; }
+                window.playerName = inputName; updateHUDName(); window.showScreen('screen-mode-select'); 
+            } catch (e) { errDiv.innerText = e; }
         };
 
         // THE IRON FUNNEL MATCHMAKING
