@@ -319,7 +319,16 @@
         <div id="host-bot-panel" class="hidden" style="margin-top: 15px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; border: 1px solid #00ffcc;">
             <span style="color:#00ffcc; margin-right: 10px;">ADD AI BOT:</span>
             <select id="bot-add-level" style="padding: 5px; background: #222; color: #fff; border: 1px solid #00ffcc; border-radius: 4px; font-weight: bold;">
-                <option value="1">LEVEL 1 (EASY)</option><option value="5">LEVEL 5 (MEDIUM)</option><option value="8">LEVEL 8 (HARD)</option><option value="10">LEVEL 10 (UNBEATABLE)</option>
+                <option value="1" style="color:#00ff00;">LEVEL 1 (EASY)</option>
+                <option value="2" style="color:#00ff00;">LEVEL 2</option>
+                <option value="3" style="color:#00ff00;">LEVEL 3</option>
+                <option value="4" style="color:#ffff00;">LEVEL 4 (PRO)</option>
+                <option value="5" style="color:#ffff00;">LEVEL 5</option>
+                <option value="6" style="color:#ffff00;">LEVEL 6</option>
+                <option value="7" style="color:#ff8800;">LEVEL 7 (ELITE)</option>
+                <option value="8" style="color:#ff8800;">LEVEL 8</option>
+                <option value="9" style="color:#ff4444;">LEVEL 9 (NIGHTMARE)</option>
+                <option value="10" style="color:#ff00ff;">LEVEL 10 (IMMORTAL)</option>
             </select>
             <button class="btn" style="padding: 5px 15px; margin: 0 0 0 10px; background: #00ffcc; color: #000; font-size: 1rem;" onclick="window.addLobbyBot()">+ ADD</button>
         </div>
@@ -380,21 +389,20 @@
     window.startSinglePlayer = (trackId) => {
         window.activeTrack = trackId; TOTAL_DIST = TRACKS[trackId].dist;
         window.isHost = true; window.isPrivateRoom = true; window.gameState = 'LOBBY'; 
-        window.isSinglePlayer = true; // FLAG ADDED
+        window.isSinglePlayer = true; 
         
-        clients = []; // PREVENTS MULTIPLE SPAWNS
-        for(let i=0; i<9; i++) {
-            let bLvl = window.botLevel;
-            let maxS = 160 + (bLvl * 14) + (Math.random() * 20);
-            if (bLvl === 10) maxS = 360; 
-            
-            clients.push({
-                id: "BOT_ID_" + i, name: "BOT_LVL" + bLvl + "_" + (i+1), dist: 0, lane: i % 3, targetLane: i % 3,
-                speed: 0, maxSpeed: maxS, accel: 80 + (bLvl * 15), nitro: 100, turboActive: false,
-                isBot: true, botLevel: bLvl, dead: false, isBraking: false,
-                colIdx: i + 1, finishTime: 999999999, lastSeen: Date.now()
-            });
-        }
+        clients = []; 
+        let bLvl = window.botLevel;
+        let maxS = 160 + (bLvl * 20); // Scaled up!
+        if (bLvl >= 10) maxS = 500; // Immortal Speed
+        
+        // SPAWN ONLY 1 BOSS RIVAL
+        clients.push({
+            id: "BOT_BOSS", name: "BOT_LVL" + bLvl + "_BOSS", dist: 0, lane: 1, targetLane: 1,
+            speed: 0, maxSpeed: maxS, accel: 100 + (bLvl * 25), nitro: 100, turboActive: false,
+            isBot: true, botLevel: bLvl, dead: false, isBraking: false,
+            colIdx: 2, finishTime: 999999999, lastSeen: Date.now()
+        });
         triggerIgnition(); 
     };
 
@@ -502,7 +510,10 @@
                 if (hostPingInterval) clearInterval(hostPingInterval);
                 hostPingInterval = setInterval(() => {
                     let now = Date.now(); let zCount = 0;
-                    clients.forEach(c => { if (now - c.lastSeen > 6000) { c.dead = true; zCount++; if(window.gameState === 'LOBBY') { try { c.conn.close(); } catch(e){} } } });
+                    clients.forEach(c => { 
+                        if (c.isBot) return; // IMMORTAL SHIELD: Never kick bots!
+                        if (now - c.lastSeen > 6000) { c.dead = true; zCount++; if(window.gameState === 'LOBBY') { try { c.conn.close(); } catch(e){} } } 
+                    });
                     if (zCount > 0 && window.gameState === 'LOBBY') { 
                         clients = clients.filter(c => now - c.lastSeen <= 6000); 
                         if (!window.isPrivateRoom) checkPublicStartConditions(); broadcastLobbyState(); 
@@ -882,51 +893,60 @@ function update(dt) {
                 p1.dist += (p1.speed * 0.277 * 4.0) * dt; 
             }
 
-            // --- SINGLE PLAYER AI BOT LOGIC ---
+            // --- AI BOT LOGIC (IMMORTAL UPDATE) ---
             clients.forEach(c => {
                 if (c.isBot && !c.dead && !crossTriggered) {
-                    // 1. Acceleration
+                    // 1. Acceleration & Nitro (Aggressive)
                     if (c.speed < c.maxSpeed && !c.isBraking) c.speed += c.accel * dt;
                     else if (c.speed > c.maxSpeed && !c.turboActive) c.speed -= 100 * dt;
 
-                    // 2. Unbeatable Nitro Management (Level 8-10)
-                    if (c.botLevel >= 8 && c.nitro > 30 && c.speed > 200) {
-                        let clear = !traffic.find(t => t.l === c.targetLane && (t.d - c.dist) < 800 && (t.d - c.dist) > 0);
+                    if (c.botLevel >= 8 && c.nitro > 20 && c.speed > 200) {
+                        let clear = !traffic.find(t => t.l === c.targetLane && (t.d - c.dist) < 1000 && (t.d - c.dist) > 0);
                         if (clear) c.turboActive = true;
                     }
                     if (c.turboActive) {
-                        c.nitro -= 16.5 * dt; c.speed = Math.min(640, c.speed + 300 * dt);
+                        c.nitro -= 15 * dt; c.speed = Math.min(650, c.speed + 400 * dt);
                         if (c.nitro <= 0) { c.turboActive = false; c.nitro = 0; }
-                    } else if (c.nitro < 100) c.nitro += 15 * dt;
+                    } else if (c.nitro < 100) c.nitro += 20 * dt;
 
-                    // 3. Perfect Obstacle Avoidance
-                    let lookAhead = 300 + (c.botLevel * 70); // Reacts earlier at higher levels
+                    // 2. Immortal Collision Foreknowledge
+                    let lookAhead = 300 + (c.botLevel * 100);
                     let danger = traffic.find(t => {
-                        let hitZ = (V_DIMS[t.type] ? V_DIMS[t.type].lB : t.radius || 50) + (c.speed * dt * 0.2);
-                        return Math.abs(t.l - c.targetLane) < 0.5 && (t.d - c.dist) < lookAhead && (t.d - c.dist) > -hitZ && t.type !== 'phantom' && t.type !== 'puddle';
+                        let hitZ = (V_DIMS[t.type] ? V_DIMS[t.type].lB : t.radius || 50) + (c.speed * dt * 0.5);
+                        return Math.abs(t.l - c.lane) < 0.6 && (t.d - c.dist) < lookAhead && (t.d - c.dist) > -hitZ && t.type !== 'phantom' && t.type !== 'puddle';
                     });
 
                     if (danger) {
-                        let lanes = [0, 1, 2].sort(() => Math.random() - 0.5); 
-                        if (c.botLevel >= 8) lanes = [1, 0, 2]; // Smart bots prioritize center
-                        for (let l of lanes) {
-                            let obs = traffic.find(t => Math.abs(t.l - l) < 0.5 && (t.d - c.dist) < lookAhead && (t.d - c.dist) > -50 && t.type !== 'phantom');
-                            if (!obs) { c.targetLane = l; break; }
+                        // Find a lane with NO obstacles
+                        let safeLanes = [0, 1, 2].filter(l => !traffic.find(t => Math.abs(t.l - l) < 0.6 && (t.d - c.dist) < lookAhead && (t.d - c.dist) > -50 && t.type !== 'phantom'));
+                        
+                        if (safeLanes.length > 0) {
+                            c.targetLane = safeLanes.sort((a,b) => Math.abs(c.lane - a) - Math.abs(c.lane - b))[0]; // Pick closest safe
+                        } else if (c.botLevel >= 10) {
+                            // IMMORTAL PHASE SHIFT: No safe lanes? Teleport through the gap!
+                            c.lane = (c.lane === 1) ? 0 : 1; 
+                            c.targetLane = c.lane;
                         }
-                        c.isBraking = (c.botLevel < 5); // Dumb bots brake when panicked, pros never brake
+                        c.isBraking = (c.botLevel < 5);
                     } else {
                         c.isBraking = false;
-                        if (c.botLevel >= 8 && c.targetLane !== 1 && !traffic.find(t => t.l === 1 && (t.d - c.dist) < lookAhead && (t.d - c.dist) > -50)) c.targetLane = 1; // Return to center
+                        // HUNTER LOGIC: Block player if bot is ahead and level 10
+                        if (c.botLevel >= 10 && p1.dist < c.dist && (c.dist - p1.dist) < 600) {
+                            c.targetLane = Math.round(p1.camLane); // Swerve to block you!
+                        } else if (c.botLevel >= 8 && c.targetLane !== 1 && !traffic.find(t => t.l === 1 && (t.d - c.dist) < lookAhead)) {
+                            c.targetLane = 1; // Return to center
+                        }
                     }
 
-                    // 4. Smooth Steering & Physics
-                    if (c.lane < c.targetLane) c.lane = Math.min(c.targetLane, c.lane + 4.5 * dt);
-                    if (c.lane > c.targetLane) c.lane = Math.max(c.targetLane, c.lane - 4.5 * dt);
+                    // 3. Smooth Steering & Physics
+                    let steerSpeed = 4.5 + (c.botLevel * 0.5); // Level 10 steers insanely fast
+                    if (c.lane < c.targetLane) c.lane = Math.min(c.targetLane, c.lane + steerSpeed * dt);
+                    if (c.lane > c.targetLane) c.lane = Math.max(c.targetLane, c.lane - steerSpeed * dt);
+                    
                     c.dist += (c.speed * 0.277 * 4.0) * dt;
                     if (c.dist >= TOTAL_DIST) { c.dist = TOTAL_DIST; c.finishTime = performance.now(); }
                 }
             });
-
             traffic.forEach(t => {
                 if(window.isHost) { 
                     if (t.type === 'asteroid') {
