@@ -395,6 +395,11 @@
         if (val == 10) { text = "UNBEATABLE"; col = "#ff00ff"; }
         let el = document.getElementById('bot-level-text');
         el.innerText = text; el.style.color = col;
+        
+        // DYNAMIC SLIDER FILL MAGIC
+        let slider = document.getElementById('bot-level-slider');
+        let percentage = ((val - 1) / 9) * 100; // Calculates exactly how full the bar should be
+        slider.style.background = `linear-gradient(to right, ${col} ${percentage}%, #222 ${percentage}%)`;
     };
 
     window.startSinglePlayer = (trackId) => {
