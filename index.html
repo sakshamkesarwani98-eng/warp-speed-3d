@@ -57,13 +57,13 @@
                     }
                     window.playerName = savedName;
                     updateHUDName();
-                    window.showScreen('screen-menu');
+                    window.showScreen('screen-mode-select'); // ROUTED TO MODE SELECT
                 } else {
                     const userDoc = await getDoc(doc(db, "users", user.uid));
                     if (userDoc.exists() && userDoc.data().username) {
                         window.playerName = userDoc.data().username;
                         updateHUDName();
-                        window.showScreen('screen-menu');
+                        window.showScreen('screen-mode-select'); // ROUTED TO MODE SELECT
                     } else {
                         window.showScreen('screen-username-gate');
                     }
@@ -85,8 +85,7 @@
                     transaction.set(nameRef, { uid: window.userUID });
                     transaction.set(doc(db, "users", window.userUID), { username: inputName });
                 });
-                window.playerName = inputName; updateHUDName(); window.showScreen('screen-menu');
-            } catch (e) { errDiv.innerText = e; }
+                window.playerName = inputName; updateHUDName(); window.showScreen('screen-mode-select'); // ROUTED TO MODE SELECT            } catch (e) { errDiv.innerText = e; }
         };
 
         // THE IRON FUNNEL MATCHMAKING
@@ -315,6 +314,15 @@
 
         <h3 id="auto-start-display" style="color:#ff4444; font-size:1.5rem; margin-bottom: 5px;" class="hidden">AUTO-START IN: 30s</h3>
         <div id="lobby-grid"></div>
+        
+        <div id="host-bot-panel" class="hidden" style="margin-top: 15px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; border: 1px solid #00ffcc;">
+            <span style="color:#00ffcc; margin-right: 10px;">ADD AI BOT:</span>
+            <select id="bot-add-level" style="padding: 5px; background: #222; color: #fff; border: 1px solid #00ffcc; border-radius: 4px; font-weight: bold;">
+                <option value="1">LEVEL 1 (EASY)</option><option value="5">LEVEL 5 (MEDIUM)</option><option value="8">LEVEL 8 (HARD)</option><option value="10">LEVEL 10 (UNBEATABLE)</option>
+            </select>
+            <button class="btn" style="padding: 5px 15px; margin: 0 0 0 10px; background: #00ffcc; color: #000; font-size: 1rem;" onclick="window.addLobbyBot()">+ ADD</button>
+        </div>
+
         <button id="btn-toggle-ready" class="btn btn-main" style="width: 200px; margin-top: 20px; transition: background 0.2s;" onclick="window.toggleReady()">READY</button>
         <button id="btn-host-start" class="btn btn-main hidden" style="width: 250px; margin-top: 20px; background:#FFD700;" onclick="window.forceHostStart()">START ENGINE</button>
         <p id="txt-waiting-host" class="hidden" style="color:#FFD700; margin-top:20px; font-size:1.2rem;">WAITING FOR HOST TO START...</p>
@@ -371,16 +379,16 @@
     window.startSinglePlayer = (trackId) => {
         window.activeTrack = trackId; TOTAL_DIST = TRACKS[trackId].dist;
         window.isHost = true; window.isPrivateRoom = true; window.gameState = 'LOBBY'; 
+        window.isSinglePlayer = true; // FLAG ADDED
         
-        clients = [];
-        const botNames = ["X-RACER", "CYBERDASH", "VOIDWALKER", "NEONPULSE", "STARDRIFT", "GHOST", "APEX", "OMEGA", "PULSAR", "VIPER"];
+        clients = []; // PREVENTS MULTIPLE SPAWNS
         for(let i=0; i<9; i++) {
             let bLvl = window.botLevel;
             let maxS = 160 + (bLvl * 14) + (Math.random() * 20);
-            if (bLvl === 10) maxS = 360; // Lift speed cap for Unbeatable
+            if (bLvl === 10) maxS = 360; 
             
             clients.push({
-                id: "BOT_" + i, name: botNames[i], dist: 0, lane: i % 3, targetLane: i % 3,
+                id: "BOT_ID_" + i, name: "BOT_LVL" + bLvl + "_" + (i+1), dist: 0, lane: i % 3, targetLane: i % 3,
                 speed: 0, maxSpeed: maxS, accel: 80 + (bLvl * 15), nitro: 100, turboActive: false,
                 isBot: true, botLevel: bLvl, dead: false, isBraking: false,
                 colIdx: i + 1, finishTime: 999999999, lastSeen: Date.now()
@@ -426,10 +434,36 @@
         const btnReady = document.getElementById('btn-toggle-ready');
         const btnHostStart = document.getElementById('btn-host-start');
         const txtWait = document.getElementById('txt-waiting-host');
-        btnReady.classList.add('hidden'); btnHostStart.classList.add('hidden'); txtWait.classList.add('hidden');
-        if (window.isPrivateRoom) { if (window.isHost) btnHostStart.classList.remove('hidden'); else { btnReady.classList.remove('hidden'); txtWait.classList.remove('hidden'); } } 
+        const botPanel = document.getElementById('host-bot-panel');
+        
+        btnReady.classList.add('hidden'); btnHostStart.classList.add('hidden'); txtWait.classList.add('hidden'); if(botPanel) botPanel.classList.add('hidden');
+        if (window.isPrivateRoom) { 
+            if (window.isHost) { btnHostStart.classList.remove('hidden'); if(botPanel) botPanel.classList.remove('hidden'); } 
+            else { btnReady.classList.remove('hidden'); txtWait.classList.remove('hidden'); } 
+        } 
         else btnReady.classList.remove('hidden');
     }
+
+    window.addLobbyBot = () => {
+        if (!window.isHost) return;
+        if (clients.length >= 9) return alert("LOBBY IS FULL!");
+        
+        let lvl = parseInt(document.getElementById('bot-add-level').value);
+        let botName = "BOT_LVL" + lvl;
+        
+        if (clients.some(c => c.name === botName)) return alert("BOT LEVEL " + lvl + " ALREADY IN LOBBY!");
+        
+        let maxS = 160 + (lvl * 14) + (Math.random() * 20);
+        if (lvl === 10) maxS = 360; 
+        
+        clients.push({
+            id: "MP_BOT_" + Math.random().toString(36).substring(2,8), name: botName, dist: 0, lane: clients.length % 3, targetLane: clients.length % 3,
+            speed: 0, maxSpeed: maxS, accel: 80 + (lvl * 15), nitro: 100, turboActive: false,
+            isBot: true, botLevel: lvl, dead: false, isBraking: false, isReady: true, // Bots are always ready!
+            colIdx: clients.length + 1, finishTime: 999999999, lastSeen: Date.now()
+        });
+        broadcastLobbyState(); // Syncs to all connected players
+    };
 
     window.toggleReady = () => {
         if (ignitionLocked) return; p1.isReady = !p1.isReady; updateReadyButtonUI();
@@ -941,6 +975,12 @@ function update(dt) {
             document.getElementById('hud-dist').innerText = TOTAL_DIST; // Forces it to display exactly 10000
             }
         } else {
+            // SINGLE PLAYER INSTA-DEATH CATCH
+            if (window.isSinglePlayer && !raceFinished) {
+                triggerGlobalFinish("YOU WRECKED!");
+                return;
+            }
+
             let target = clients.find(c => c.id === window.spectatingId);
             if (target && !target.dead) { p1.camLane += (target.lane - p1.camLane) * 8 * dt; p1.camZoom += (0.55 - p1.camZoom) * 4 * dt; } else window.specNext();
         }
@@ -1379,9 +1419,14 @@ function update(dt) {
         if(window.countdownTimer) clearInterval(window.countdownTimer);
         if(hostConnToLobby) { try{ hostConnToLobby.close(); } catch(e) {} hostConnToLobby = null; }
         if(peer) { try{ peer.destroy(); } catch(e) {} peer = null; }
-        clients = []; window.isHost = false; raceFinished = false; crossTriggered = false; window.spectatingId = null; ignitionLocked = false; p1.isReady = false; window.lobbyPlayers = [];
+        
+        // ADDED isSinglePlayer = false reset
+        clients = []; window.isHost = false; window.isSinglePlayer = false; raceFinished = false; crossTriggered = false; window.spectatingId = null; ignitionLocked = false; p1.isReady = false; window.lobbyPlayers = [];
         lastTime = 0; window.gameState = 'MENU';
-        window.showScreen('screen-menu'); document.getElementById('progress-bar').classList.add('hidden'); document.getElementById('spectator-ui').classList.add('hidden'); document.getElementById('asteroid-warning').classList.add('hidden');
+        
+        // ROUTE BACK TO MODE SELECT INSTEAD OF MULTIPLAYER HUB
+        window.showScreen('screen-mode-select'); 
+        document.getElementById('progress-bar').classList.add('hidden'); document.getElementById('spectator-ui').classList.add('hidden'); document.getElementById('asteroid-warning').classList.add('hidden');
   };
 
 </script>
