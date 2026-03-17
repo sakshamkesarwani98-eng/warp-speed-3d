@@ -21,8 +21,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, runTransaction, collection, addDoc, onSnapshot, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
+        import { getFirestore, doc, setDoc, getDoc, runTransaction, collection, addDoc, onSnapshot, query, orderBy, limit, serverTimestamp, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         const firebaseConfig = {
             apiKey: "AIzaSyDppG77Saed8i49ZzeTlgougqRfYwV0D4s",
             authDomain: "warpspeed3d-771b7.firebaseapp.com",
@@ -56,14 +55,16 @@
                         localStorage.setItem('warpspeed_guest_name', savedName);
                     }
                     window.playerName = savedName;
+                    window.playerWins = 0; // Guests have 0 trophies
                     updateHUDName();
-                    window.showScreen('screen-mode-select'); // ROUTED TO MODE SELECT
+                    window.showScreen('screen-mode-select'); 
                 } else {
                     const userDoc = await getDoc(doc(db, "users", user.uid));
                     if (userDoc.exists() && userDoc.data().username) {
                         window.playerName = userDoc.data().username;
+                        window.playerWins = userDoc.data().wins || 0; // Load trophies!
                         updateHUDName();
-                        window.showScreen('screen-mode-select'); // ROUTED TO MODE SELECT
+                        window.showScreen('screen-mode-select');
                     } else {
                         window.showScreen('screen-username-gate');
                     }
@@ -153,7 +154,10 @@
             }
         };
         window.doLogout = () => signOut(auth);
-        function updateHUDName() { document.getElementById('hud-player-name').innerText = "RACER: " + window.playerName; }
+        function updateHUDName() { 
+            let winText = (window.playerWins > 0) ? ` (🏆${window.playerWins})` : "";
+            document.getElementById('hud-player-name').innerText = "RACER: " + window.playerName + winText; 
+        }
 
         // --- UNSANCTIONED GLOBAL CHAT SYSTEM (FIREBASE ENABLED) ---
         window.addEventListener('DOMContentLoaded', () => {
@@ -250,8 +254,8 @@
         #asteroid-warning { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); color: #ff0000; font-size: 1.5rem; z-index: 60; text-shadow: 0 0 10px #f00, 2px 2px 0 #000; animation: flashWarning 1s infinite; pointer-events: none; }
         @keyframes flashWarning { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-        /* Screens */
-        .screen { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 30; backdrop-filter: blur(8px); }
+        /* Screens (Backdrop-filter removed to fix Fullscreen rotation glitch) */
+        .screen { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.90); z-index: 30; }
         .hidden { display: none !important; }
         h1 { font-size: 5rem; text-transform: uppercase; margin-bottom: 2rem; text-align: center; color: #fff; text-shadow: 4px 4px 0px #000; line-height: 1; }
         
@@ -689,7 +693,7 @@
                             return;
                         }
                         
-                        clients.push({ conn: conn, id: conn.peer, name: data.name, dist: 0, lane: 1, speed: 0, dead: false, isBraking: false, colIdx: clients.length + 1, finishTime: 999999999, lastSeen: Date.now(), isReady: false });
+                        clients.push({ conn: conn, id: conn.peer, name: data.name, wins: data.wins || 0, dist: 0, lane: 1, speed: 0, dead: false, isBraking: false, colIdx: clients.length + 1, finishTime: 999999999, lastSeen: Date.now(), isReady: false });
                         try { conn.send({type: 'accepted', colIdx: clients.length, isPrivate: window.isPrivateRoom, trackId: window.activeTrack}); } catch(e){}
                         if(!window.isPrivateRoom) checkPublicStartConditions(); broadcastLobbyState();
                     }
@@ -735,7 +739,7 @@
                 hostConnToLobby = peer.connect(roomCode);
                 
                 hostConnToLobby.on('open', () => {
-                    try { hostConnToLobby.send({ type: 'join_request', name: window.playerName, pass: roomPass }); } catch(e){}
+                    try { hostConnToLobby.send({ type: 'join_request', name: window.playerName, pass: roomPass, wins: window.playerWins || 0 }); } catch(e){}
                     if(joinBtn) {joinBtn.disabled = false; joinBtn.innerText = "CONNECT";}
                     if(clientPingInterval) clearInterval(clientPingInterval);
                     clientPingInterval = setInterval(() => { if (hostConnToLobby && hostConnToLobby.open) { try { hostConnToLobby.send({type: 'ping'}); } catch(e){} } }, 2000);
@@ -772,8 +776,8 @@
     };
     function broadcastLobbyState() {
         if (!window.isHost) return;
-        let unifiedPlayers = [{ id: myPeerId, name: window.playerName, isReady: p1.isReady, isHost: true }];
-        clients.forEach(c => unifiedPlayers.push({ id: c.id, name: c.name, isReady: c.isReady, isHost: false }));
+        let unifiedPlayers = [{ id: myPeerId, name: window.playerName, wins: window.playerWins || 0, isReady: p1.isReady, isHost: true }];
+        clients.forEach(c => unifiedPlayers.push({ id: c.id, name: c.name, wins: c.wins || 0, isReady: c.isReady, isHost: false }));
         window.lobbyPlayers = unifiedPlayers;
         let stateData = { type: 'lobby_state', players: unifiedPlayers, autoStartSecs: autoStartSeconds, hasAutoStart: (autoStartInterval !== null) };
         clients.forEach(c => { try { c.conn.send(stateData); } catch(e){} }); 
@@ -935,9 +939,9 @@
                 let p = playersToRender[i]; let isMe = (p.id === myPeerId);
                 let hostTag = (window.isPrivateRoom && p.isHost) ? `<span class="status-box status-host">HOST</span>` : '';
                 let statusTag = p.isReady ? `<span class="status-box status-ready">READY</span>` : `<span class="status-box status-not-ready">NOT READY</span>`;
-                
-                // KICK BUTTON LOGIC: Only the Host sees it, only in Private Rooms, and they can't kick themselves
-                let kickBtn = (window.isHost && window.isPrivateRoom && !isMe) 
+                let winDisplay = (p.wins && p.wins > 0) ? `(🏆${p.wins})` : '';
+                grid.innerHTML += `<div class="lobby-slot"><span style="${isMe ? 'color:#00ffcc;' : ''}">${i+1}. ${p.name}${winDisplay}</span> ${hostTag || statusTag}</div>`;
+ 
                     ? `<button onclick="window.kickPlayer('${p.id}')" style="background:#ff4444; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold; margin-left:10px;">KICK</button>` 
                     : '';
 
@@ -965,6 +969,18 @@
         let allRacers = clients.map(c => ({id: c.id, name: c.name, dist: c.dist, dead: c.dead, finishTime: c.finishTime || 999999999}));
         allRacers.push({id: myPeerId, name: window.playerName, dist: p1.dist, dead: p1.dead, finishTime: p1.finishTime || 999999999});
         allRacers.sort((a, b) => { if (!a.dead && !b.dead) return a.finishTime - b.finishTime; if (!a.dead && b.dead) return -1; if (a.dead && !b.dead) return 1; return b.dist - a.dist; });
+        
+        // --- TROPHY SYSTEM: ONLY 1ST PLACE SURVIVOR GETS IT ---
+        let myRank = allRacers.findIndex(r => r.id === myPeerId) + 1;
+        if (myRank === 1 && !p1.dead && window.userUID && !window.playerName.startsWith('GUEST_')) {
+            try {
+                const userRef = doc(db, "users", window.userUID);
+                updateDoc(userRef, { wins: increment(1) });
+                window.playerWins = (window.playerWins || 0) + 1; // Update locally so they see it instantly next game
+                updateHUDName(); // Update the top-left HUD
+            } catch(e) { console.error("Could not save trophy:", e); }
+        }
+
         clients.forEach(c => { try { c.conn.send({ type: 'race_over', rankings: allRacers, reason: reasonStr }); } catch(e){} }); 
         showFinalResults(allRacers, reasonStr);
     }
