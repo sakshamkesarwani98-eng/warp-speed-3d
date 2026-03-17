@@ -939,15 +939,18 @@
                 let p = playersToRender[i]; let isMe = (p.id === myPeerId);
                 let hostTag = (window.isPrivateRoom && p.isHost) ? `<span class="status-box status-host">HOST</span>` : '';
                 let statusTag = p.isReady ? `<span class="status-box status-ready">READY</span>` : `<span class="status-box status-not-ready">NOT READY</span>`;
-                let winDisplay = (p.wins && p.wins > 0) ? `(🏆${p.wins})` : '';
-                grid.innerHTML += `<div class="lobby-slot"><span style="${isMe ? 'color:#00ffcc;' : ''}">${i+1}. ${p.name}${winDisplay}</span> ${hostTag || statusTag}</div>`;
- 
+                
+                // Trophy System Display
+                let winDisplay = (p.wins && p.wins > 0) ? ` (🏆${p.wins})` : '';
+
+                // Host Kick Button
+                let kickBtn = (window.isHost && window.isPrivateRoom && !isMe) 
                     ? `<button onclick="window.kickPlayer('${p.id}')" style="background:#ff4444; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold; margin-left:10px;">KICK</button>` 
                     : '';
 
                 grid.innerHTML += `<div class="lobby-slot">
-                                    <span style="${isMe ? 'color:#00ffcc;' : ''}">${i+1}. ${p.name}</span> 
-                                    <div>${hostTag || statusTag} ${kickBtn}</div>
+                                    <span style="${isMe ? 'color:#00ffcc;' : ''}">${i+1}. ${p.name}${winDisplay}</span> 
+                                    <div style="display:flex; align-items:center;">${hostTag || statusTag} ${kickBtn}</div>
                                    </div>`;
             } else { grid.innerHTML += `<div class="lobby-slot" style="color:#666;"><span>${i+1}. [ EMPTY SLOT ]</span> </div>`; }
         }
@@ -1586,10 +1589,12 @@ function update(dt) {
         if (dt > 0.1) dt = 0.016; 
         
         if(window.gameState === 'RACE') update(dt); 
-        if(window.gameState !== 'AUTH' && window.gameState !== 'MENU') draw();
+        
+        // FIX: Allow draw() to run in the MENU so the background doesn't vanish on rotation/fullscreen
+        if(window.gameState !== 'AUTH') draw();
+        
         requestAnimationFrame(loop); 
     }
-    requestAnimationFrame(loop);
 
     function fireConfetti() {
         let duration = 3000; let end = Date.now() + duration;
