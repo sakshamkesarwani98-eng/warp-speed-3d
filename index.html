@@ -617,9 +617,25 @@
                 window.lobbyPlayers = [{ id: myPeerId, name: window.playerName, isReady: p1.isReady, isHost: true }];
                 updateLobbyUI();
 
+                let roomStartTime = Date.now(); // Track exactly when the room was born
                 if (hostPingInterval) clearInterval(hostPingInterval);
                 hostPingInterval = setInterval(() => {
-                    let now = Date.now(); let zCount = 0;
+                    let now = Date.now(); 
+                    
+                    // --- 30 MINUTE ROOM NUKE (1,800,000 milliseconds) ---
+                    if (now - roomStartTime > 1800000) { 
+                        clients.forEach(c => { 
+                            try { 
+                                c.conn.send({type: 'rejected', msg: 'ROOM CLOSED: 30 MINUTE TIME LIMIT REACHED'}); 
+                                setTimeout(() => c.conn.close(), 500); 
+                            } catch(e){} 
+                        });
+                        alert("ROOM CLOSED: 30 Minute Time Limit Reached.");
+                        window.leaveLobby();
+                        return;
+                    }
+
+                    let zCount = 0;
                     clients.forEach(c => { 
                         if (c.isBot) return; // DON'T PING-KICK BOTS
                         if (now - c.lastSeen > 6000) { c.dead = true; zCount++; if(window.gameState === 'LOBBY') { try { c.conn.close(); } catch(e){} } } 
@@ -627,7 +643,15 @@
                     if (zCount > 0 && window.gameState === 'LOBBY') { 
                         clients = clients.filter(c => now - c.lastSeen <= 6000); 
                         if (!window.isPrivateRoom) checkPublicStartConditions(); broadcastLobbyState(); 
-                    } else if (zCount > 0 && window.gameState === 'RACE') checkRaceState();
+                    } else if (zCount > 0 && window.gameState === 'RACE') {
+                        checkRaceState();
+                    }
+
+                    // --- THE MATCHMAKING HEARTBEAT ---
+                    // Continually tells Firebase the Host is still open and waiting!
+                    if (!window.isPrivateRoom && window.gameState === 'LOBBY') {
+                        try { setDoc(doc(db, "matchmaking", "LATEST_PUBLIC"), { timestamp: Date.now(), playerCount: clients.length + 1 }, { merge: true }); } catch(e){}
+                    }
                 }, 3000);
             });
 
